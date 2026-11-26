@@ -1,8 +1,8 @@
 import { sendWaitlistNotification, sendWelcomeEmail } from '../notifications';
-import { sendEmail } from '../ses';
+import { sendEmail } from '../email-provider';
 
-// Mock the SES module
-jest.mock('../ses', () => ({
+// Mock the email provider module
+jest.mock('../email-provider', () => ({
   sendEmail: jest.fn(),
 }));
 

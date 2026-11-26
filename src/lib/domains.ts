@@ -1,12 +1,6 @@
 import { query } from "./database";
-import {
-  verifyDomain,
-  getDomainVerificationStatus,
-  createConfigurationSet,
-  generateDNSRecords,
-  enableDomainDkim,
-  getDomainDkimTokens,
-} from "./ses";
+import { getEmailProvider, getProviderName } from "./email-provider";
+import type { ProviderName } from "./email-provider";
 import {
   setupDomainDNS,
   verifyDomainOwnership,
@@ -19,6 +13,7 @@ export interface DNSRecord {
   name: string;
   value: string;
   ttl?: number;
+  description?: string;
 }
 
 export interface DomainSetupResult {
@@ -45,29 +40,6 @@ function safeParseDNSRecords(dnsRecords: unknown): DNSRecord[] {
   return [];
 }
 
-// Helper function to safely stringify JSON with circular reference protection
-function safeJSONStringify(obj: unknown): string {
-  try {
-    return JSON.stringify(obj);
-  } catch (error) {
-    console.error("JSON stringify error:", error);
-    console.error("Object causing error:", obj);
-    // Try to create a safe version by copying only plain properties
-    if (Array.isArray(obj)) {
-      return JSON.stringify(
-        obj.map((item: Record<string, unknown>) => ({
-          type: item.type,
-          name: item.name,
-          value: item.value || item.data,
-          ttl: item.ttl,
-        }))
-      );
-    }
-    return "[]";
-  }
-}
-
-// Helper function to convert DODomainRecord to DNSRecord
 function convertDORecordToDNSRecord(doRecord: DODomainRecord): DNSRecord {
   return {
     type: doRecord.type,
@@ -77,102 +49,121 @@ function convertDORecordToDNSRecord(doRecord: DODomainRecord): DNSRecord {
   };
 }
 
+function withParsedRecords(row: Domain): Domain {
+  return { ...row, dns_records: safeParseDNSRecords(row.dns_records) };
+}
+
+/** The provider a domain was registered with (rows created before the column existed are SES). */
+export function domainProvider(domain: Pick<Domain, "provider">): ProviderName {
+  return domain.provider === "brevo" ? "brevo" : "ses";
+}
+
+/** Throws when a domain belongs to a different provider than the one configured now. */
+export function assertDomainProvider(domain: Domain): void {
+  const configured = getProviderName();
+  const owner = domainProvider(domain);
+  if (owner !== configured) {
+    const label = (p: ProviderName) => getEmailProvider(p).label;
+    throw new Error(
+      `${domain.domain} was set up with ${label(owner)}, but this server now uses ${label(configured)}. ` +
+        `Delete the domain and add it again to set it up with ${label(configured)}.`
+    );
+  }
+}
+
+/** Push records to DigitalOcean when the domain is hosted there. Never throws. */
+export async function syncDnsToDigitalOcean(
+  domainName: string,
+  dnsRecords: DNSRecord[]
+): Promise<{ records: DNSRecord[]; instructions: string }> {
+  try {
+    if (!(await verifyDomainOwnership(domainName))) {
+      return {
+        records: [],
+        instructions:
+          "Add the DNS records below at your DNS provider, then click Verify.",
+      };
+    }
+    const doRecords = await setupDomainDNS(
+      domainName,
+      dnsRecords.map((r) => ({ ...r, ttl: r.ttl ?? 300 }))
+    );
+    return {
+      records: doRecords.map(convertDORecordToDNSRecord),
+      instructions: "DNS records have been created automatically in DigitalOcean.",
+    };
+  } catch (error) {
+    console.warn("DigitalOcean DNS setup failed:", error);
+    return {
+      records: [],
+      instructions: "Add the DNS records below at your DNS provider, then click Verify.",
+    };
+  }
+}
+
 export async function addDomain(
   userId: string,
   domainName: string
 ): Promise<DomainSetupResult> {
-  // Validate domain format
   if (!isValidDomain(domainName)) {
     throw new Error("Invalid domain format");
   }
 
-  // Check if domain already exists in our database
-  const existingDomain = await getDomainByName(domainName);
-  if (existingDomain) {
-    // If domain exists, check and complete its setup
-    return await verifyAndCompleteExistingDomain(userId, existingDomain);
+  const existing = await getDomainByName(domainName);
+  if (existing && existing.user_id !== userId) {
+    throw new Error("Domain belongs to another user");
   }
+  if (existing) assertDomainProvider(existing);
+
+  const provider = getEmailProvider();
 
   try {
-    // 1. Verify domain with Amazon SES
-    const sesVerification = await verifyDomain(domainName);
+    const setup = await provider.setupDomain(domainName, existing?.verification_token);
+    const dnsRecords: DNSRecord[] = setup.dnsRecords;
+    const dns = await syncDnsToDigitalOcean(domainName, dnsRecords);
 
-    // 2. Enable DKIM for the domain (optional - graceful fallback)
-    let dkimTokens: string[] = [];
-    try {
-      dkimTokens = await enableDomainDkim(domainName);
-      console.log(
-        `DKIM enabled for ${domainName} with ${dkimTokens.length} tokens`
-      );
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.warn(`DKIM setup failed for ${domainName}:`, errorMessage);
-      console.warn(
-        "Continuing without DKIM (you can set it up manually in AWS SES console)"
-      );
-    }
-
-    // 3. Create SES configuration set
-    const configurationSet = await createConfigurationSet(domainName);
-
-    // 4. Generate DNS records (including DKIM if available)
-    const dnsRecords = generateDNSRecords(
-      domainName,
-      sesVerification.verificationToken,
-      dkimTokens
-    );
-
-    // 5. Setup DNS records in Digital Ocean (if configured)
-    let digitalOceanRecords: DNSRecord[] = [];
-    let setupInstructions = "";
-
-    try {
-      const isDomainInDO = await verifyDomainOwnership(domainName);
-      if (isDomainInDO) {
-        const doRecords = await setupDomainDNS(domainName, dnsRecords);
-        digitalOceanRecords = doRecords.map(convertDORecordToDNSRecord);
-        setupInstructions =
-          "DNS records have been automatically created in Digital Ocean.";
-      } else {
-        setupInstructions = `Domain not found in Digital Ocean. Please create the DNS records manually or add the domain to your Digital Ocean account first.`;
-      }
-    } catch (error: unknown) {
-      console.warn("Digital Ocean setup failed:", error);
-      setupInstructions =
-        "DNS records need to be created manually. Please add the following records to your DNS provider:";
-    }
-
-    // 6. Store domain information in database
-    const result = await query(
-      `INSERT INTO domains (user_id, domain, status, ses_configuration_set, dns_records, verification_token) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
-       RETURNING *`,
-      [
-        userId,
-        domainName,
-        "pending",
-        configurationSet,
-        safeJSONStringify(dnsRecords || []),
-        sesVerification.verificationToken,
-      ]
-    );
+    const result = existing
+      ? await query(
+          `UPDATE domains
+             SET dns_records = $2,
+                 verification_token = COALESCE($3, verification_token),
+                 ses_configuration_set = COALESCE($4, ses_configuration_set),
+                 updated_at = NOW()
+           WHERE id = $1
+           RETURNING *`,
+          [
+            existing.id,
+            JSON.stringify(dnsRecords),
+            setup.verificationToken ?? null,
+            setup.configurationSet ?? null,
+          ]
+        )
+      : await query(
+          `INSERT INTO domains (user_id, domain, status, ses_configuration_set, dns_records, verification_token, provider)
+           VALUES ($1, $2, 'pending', $3, $4, $5, $6)
+           RETURNING *`,
+          [
+            userId,
+            domainName,
+            setup.configurationSet ?? null,
+            JSON.stringify(dnsRecords),
+            setup.verificationToken ?? null,
+            provider.name,
+          ]
+        );
 
     if (result.rows.length === 0) {
-      throw new Error("Failed to create domain record");
+      throw new Error("Failed to save domain record");
     }
 
-    const domain = {
-      ...result.rows[0],
-      dns_records: safeParseDNSRecords(result.rows[0].dns_records),
-    };
-
     return {
-      domain,
+      domain: withParsedRecords(result.rows[0]),
       dnsRecords,
-      sesConfigurationSet: configurationSet,
-      digitalOceanRecords,
-      setupInstructions,
+      sesConfigurationSet: setup.configurationSet,
+      digitalOceanRecords: dns.records,
+      setupInstructions: existing
+        ? `Domain already exists. ${dns.instructions}`
+        : dns.instructions,
     };
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -180,180 +171,18 @@ export async function addDomain(
   }
 }
 
-async function verifyAndCompleteExistingDomain(
-  userId: string,
-  existingDomain: Domain
-): Promise<DomainSetupResult> {
-  // Check ownership
-  if (existingDomain.user_id !== userId) {
-    throw new Error("Domain belongs to another user");
-  }
-
-  const domainName = existingDomain.domain;
-  let needsUpdate = false;
-  const updateFields: Record<string, string> = {};
-  let setupInstructions = "";
-  let digitalOceanRecords: DNSRecord[] = [];
-
-  try {
-    // 1. Check SES domain status
-    let sesStatus = "NotStarted";
-    let sesVerificationToken = existingDomain.verification_token;
-
-    try {
-      sesStatus = await getDomainVerificationStatus(domainName);
-      console.log(`SES status for ${domainName}: ${sesStatus}`);
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      if (
-        errorMessage.includes("not exist") ||
-        errorMessage.includes("not found")
-      ) {
-        // Domain doesn't exist in SES, need to verify it
-        console.log(`Domain ${domainName} not found in SES, re-verifying...`);
-        try {
-          const sesVerification = await verifyDomain(domainName);
-          sesVerificationToken = sesVerification.verificationToken;
-          sesStatus = "Pending";
-          needsUpdate = true;
-          updateFields.verification_token = sesVerificationToken;
-          console.log(`Re-verified domain ${domainName} in SES`);
-        } catch (verifyError: unknown) {
-          const verifyErrorMessage =
-            verifyError instanceof Error
-              ? verifyError.message
-              : String(verifyError);
-          console.warn(
-            `Failed to re-verify domain in SES: ${verifyErrorMessage}`
-          );
-        }
-      }
-    }
-
-    // 2. Check/setup DKIM
-    let dkimTokens: string[] = [];
-    try {
-      dkimTokens = await getDomainDkimTokens(domainName);
-      console.log(`Found ${dkimTokens.length} DKIM tokens for ${domainName}`);
-    } catch {
-      console.log(`DKIM not found for ${domainName}, attempting to enable...`);
-      try {
-        dkimTokens = await enableDomainDkim(domainName);
-        console.log(
-          `Enabled DKIM for ${domainName} with ${dkimTokens.length} tokens`
-        );
-      } catch (dkimError: unknown) {
-        const dkimErrorMessage =
-          dkimError instanceof Error ? dkimError.message : String(dkimError);
-        console.warn(
-          `Failed to enable DKIM for ${domainName}: ${dkimErrorMessage}`
-        );
-      }
-    }
-
-    // 3. Check/create SES configuration set
-    let configurationSet = existingDomain.ses_configuration_set;
-    if (!configurationSet) {
-      try {
-        configurationSet = await createConfigurationSet(domainName);
-        needsUpdate = true;
-        updateFields.ses_configuration_set = configurationSet;
-        console.log(
-          `Created configuration set for ${domainName}: ${configurationSet}`
-        );
-      } catch (error: unknown) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        console.warn(`Failed to create configuration set: ${errorMessage}`);
-      }
-    }
-
-    // 4. Generate current DNS records
-    const dnsRecords = generateDNSRecords(
-      domainName,
-      sesVerificationToken || "",
-      dkimTokens
-    );
-
-    // 5. Check/setup Digital Ocean DNS
-    try {
-      const isDomainInDO = await verifyDomainOwnership(domainName);
-      if (isDomainInDO) {
-        console.log(
-          `Domain ${domainName} found in Digital Ocean, checking DNS setup...`
-        );
-        try {
-          const doRecords = await setupDomainDNS(domainName, dnsRecords);
-          digitalOceanRecords = doRecords.map(convertDORecordToDNSRecord);
-          setupInstructions =
-            "DNS records have been verified/updated in Digital Ocean.";
-        } catch (dnsError: unknown) {
-          const dnsErrorMessage =
-            dnsError instanceof Error ? dnsError.message : String(dnsError);
-          console.warn(`DNS setup failed: ${dnsErrorMessage}`);
-          setupInstructions =
-            "DNS records need to be updated manually in Digital Ocean.";
-        }
-      } else {
-        setupInstructions = `Domain not found in Digital Ocean. Please add the domain to your Digital Ocean account or create DNS records manually.`;
-      }
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.warn(`Digital Ocean check failed: ${errorMessage}`);
-      setupInstructions =
-        "Unable to verify Digital Ocean setup. Please check DNS records manually.";
-    }
-
-    // 6. Update database if needed
-    if (needsUpdate) {
-      const updateQuery = `
-        UPDATE domains 
-        SET ${Object.keys(updateFields)
-          .map((key, index) => `${key} = $${index + 2}`)
-          .join(", ")}, 
-            dns_records = $${Object.keys(updateFields).length + 2},
-            updated_at = NOW()
-        WHERE id = $1 
-        RETURNING *`;
-
-      const queryParams = [
-        existingDomain.id,
-        ...Object.values(updateFields),
-        safeJSONStringify(dnsRecords || []),
-      ];
-
-      const result = await query(updateQuery, queryParams);
-
-      if (result.rows.length > 0) {
-        const updatedDomain = {
-          ...result.rows[0],
-          dns_records: safeParseDNSRecords(result.rows[0].dns_records),
-        };
-
-        return {
-          domain: updatedDomain,
-          dnsRecords,
-          sesConfigurationSet: configurationSet,
-          digitalOceanRecords,
-          setupInstructions: `Domain already exists. ${setupInstructions}`,
-        };
-      }
-    }
-
-    // 7. Return existing domain with current setup info
-    return {
-      domain: existingDomain,
-      dnsRecords,
-      sesConfigurationSet: configurationSet,
-      digitalOceanRecords,
-      setupInstructions: `Domain already exists. ${setupInstructions}`,
-    };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to verify existing domain setup: ${errorMessage}`);
-  }
+/** Re-read the DNS records from the provider and store them. */
+export async function refreshDomainDnsRecords(domain: Domain): Promise<DNSRecord[]> {
+  assertDomainProvider(domain);
+  const records: DNSRecord[] = await getEmailProvider().getDnsRecords(
+    domain.domain,
+    domain.verification_token
+  );
+  await query(
+    "UPDATE domains SET dns_records = $2, updated_at = NOW() WHERE id = $1",
+    [domain.id, JSON.stringify(records)]
+  );
+  return records;
 }
 
 export async function getUserDomains(userId: string): Promise<Domain[]> {
@@ -447,15 +276,10 @@ export async function checkDomainVerification(
     throw new Error("Domain not found");
   }
 
-  try {
-    const sesStatus = await getDomainVerificationStatus(domain.domain);
+  assertDomainProvider(domain);
 
-    let newStatus: Domain["status"] = "pending";
-    if (sesStatus === "Success") {
-      newStatus = "verified";
-    } else if (sesStatus === "Failed") {
-      newStatus = "failed";
-    }
+  try {
+    const newStatus = await getEmailProvider().checkDomainStatus(domain.domain);
 
     if (newStatus !== domain.status) {
       await updateDomainStatus(domainId, newStatus);
@@ -467,6 +291,7 @@ export async function checkDomainVerification(
     return domain.status;
   }
 }
+
 
 export async function deleteDomain(
   domainId: string,

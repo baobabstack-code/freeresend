@@ -1,4 +1,4 @@
-import { sendEmail } from "./ses";
+import { sendEmail } from "./email-provider";
 
 export interface WaitlistNotificationData {
   email: string;

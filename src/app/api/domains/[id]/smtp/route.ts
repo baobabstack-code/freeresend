@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/database";
-import { createSmtpCredentials, deleteSmtpCredentials } from "@/lib/smtp";
+import { getEmailProvider } from "@/lib/email-provider";
+import { assertDomainProvider } from "@/lib/domains";
+import type { Domain } from "@/lib/database";
 import { verifyJWT } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +66,27 @@ export async function POST(
       ));
     }
 
+    const provider = getEmailProvider();
+    try {
+      assertDomainProvider(domain as Domain);
+    } catch (e) {
+      return cors(NextResponse.json({ error: (e as Error).message }, { status: 409 }));
+    }
+
+    // Account-wide SMTP login (Brevo): return it, never store it per domain
+    if (provider.smtpMode === "shared") {
+      const shared = provider.getSharedSmtpCredentials?.() ?? null;
+      if (!shared) {
+        return cors(NextResponse.json(
+          {
+            error: `${provider.label} SMTP is not configured. Set BREVO_SMTP_LOGIN and BREVO_SMTP_KEY to enable it.`,
+          },
+          { status: 400 }
+        ));
+      }
+      return cors(NextResponse.json({ success: true, credentials: shared }));
+    }
+
     // Check if SMTP credentials already exist
     if (domain.smtp_credentials) {
       return cors(NextResponse.json(
@@ -76,7 +99,7 @@ export async function POST(
     }
 
     // Create SMTP credentials
-    const smtpCreds = await createSmtpCredentials(domain.domain);
+    const smtpCreds = await provider.createSmtpCredentials!(domain.domain);
 
     // Store credentials in database
     await query(
@@ -144,8 +167,18 @@ export async function DELETE(
 
     const domain = domainResult.rows[0];
 
+    const provider = getEmailProvider();
+    if (provider.smtpMode === "shared") {
+      return cors(NextResponse.json(
+        {
+          error: `${provider.label} uses one SMTP login for the whole account. Manage it in your ${provider.label} dashboard.`,
+        },
+        { status: 400 }
+      ));
+    }
+
     // Delete SMTP credentials from AWS
-    await deleteSmtpCredentials(domain.domain);
+    await provider.deleteSmtpCredentials!(domain.domain);
 
     // Remove credentials from database
     await query(

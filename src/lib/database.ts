@@ -64,11 +64,14 @@ export interface Domain {
   ses_configuration_set?: string;
   do_domain_id?: string;
   dns_records: unknown[];
+  /** Email provider the domain was registered with ("ses" | "brevo"). */
+  provider?: string;
   smtp_credentials?: {
     username: string;
     password: string;
     server: string;
     port: number;
+    domain?: string;
   };
   created_at: string;
   updated_at: string;
@@ -108,6 +111,7 @@ export interface EmailLog {
     | "bounced"
     | "complained";
   ses_message_id?: string;
+  provider?: string;
   error_message?: string;
   webhook_data?: unknown;
   created_at: string;
