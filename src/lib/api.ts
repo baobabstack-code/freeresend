@@ -45,7 +45,11 @@ class ApiClient {
       const error = await response
         .json()
         .catch(() => ({ error: "Network error" }));
-      throw new Error(error.error || "Request failed");
+      const details =
+        typeof error.details === "string" && error.details !== error.error
+          ? `: ${error.details}`
+          : "";
+      throw new Error(`${error.error || "Request failed"}${details}`);
     }
 
     return response.json();
@@ -141,6 +145,22 @@ class ApiClient {
 
   async getEmail(id: string) {
     return this.request(`/emails/${id}`);
+  }
+
+  // SMTP credentials
+  async createSmtpCredentials(domainId: string) {
+    return this.request(`/domains/${domainId}/smtp`, { method: "POST" });
+  }
+
+  async deleteSmtpCredentials(domainId: string) {
+    return this.request(`/domains/${domainId}/smtp`, { method: "DELETE" });
+  }
+
+  // Which email provider this server sends through
+  async getProvider(): Promise<{
+    data: { name: "ses" | "brevo"; label: string; smtpMode: "per-domain" | "shared" };
+  }> {
+    return this.request("/provider");
   }
 }
 

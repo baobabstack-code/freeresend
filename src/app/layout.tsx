@@ -1,40 +1,57 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Roboto, Roboto_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
-import { AuthProvider } from "@/contexts/AuthContext";
+import Providers from "./providers";
+import { site } from "@/config/site";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const roboto = Roboto({
+  variable: "--font-roboto",
   subsets: ["latin"],
+  weight: ["400", "500", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const robotoMono = Roboto_Mono({
+  variable: "--font-roboto-mono",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "FreeResend - Self-hosted Email Service | 85% Cost Savings",
-  description:
-    "Open-source, self-hosted alternative to Resend. 100% API compatible with 85% cost savings using Amazon SES. Drop-in replacement with auto DNS setup.",
-  keywords: "resend alternative, self-hosted email, amazon ses, transactional email, email api, open source",
-  authors: [{ name: "Emad Ibrahim", url: "https://x.com/eibrahim" }],
-  creator: "Emad Ibrahim",
+  metadataBase: new URL(site.url),
+  title: {
+    default: `${site.name} — ${site.tagline}`,
+    template: `%s | ${site.name}`,
+  },
+  description: site.description,
+  keywords:
+    "transactional email api, resend alternative, brevo, amazon ses, email api zimbabwe, baobab stack",
+  authors: [{ name: site.company, url: site.companyUrl }],
+  creator: site.company,
+  publisher: site.company,
   openGraph: {
-    title: "FreeResend - Self-hosted Alternative to Resend",
-    description: "100% API compatible • 85% cost savings • Complete control over your email infrastructure",
-    url: "https://freeresend.com",
-    siteName: "FreeResend",
+    title: `${site.name} — ${site.tagline}`,
+    description: site.description,
+    url: site.url,
+    siteName: site.name,
     type: "website",
+    images: [{ url: "/brand/baobab-mark-1024.jpg", width: 1024, height: 1024 }],
   },
   twitter: {
-    card: "summary_large_image",
-    title: "FreeResend - Self-hosted Alternative to Resend",
-    description: "100% API compatible • 85% cost savings • Complete control over your email infrastructure",
-    creator: "@eibrahim",
+    card: "summary",
+    title: `${site.name} — ${site.tagline}`,
+    description: site.description,
   },
 };
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0f17" },
+  ],
+};
+
+const umamiSrc = process.env.NEXT_PUBLIC_UMAMI_SRC;
+const umamiWebsiteId = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID;
 
 export default function RootLayout({
   children,
@@ -44,16 +61,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <Script
-          defer
-          src="https://analytics.hub.elitecoders.ai/umami"
-          data-website-id="14571765-f9b8-4ced-b501-61413f2bdabf"
-        />
+        {umamiSrc && umamiWebsiteId ? (
+          <Script defer src={umamiSrc} data-website-id={umamiWebsiteId} />
+        ) : null}
       </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <AuthProvider>{children}</AuthProvider>
+      <body className={`${roboto.variable} ${robotoMono.variable}`}>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

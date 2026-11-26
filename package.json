@@ -35,6 +35,8 @@
   "dependencies": {
     "@aws-sdk/client-iam": "^3.899.0",
     "@aws-sdk/client-ses": "^3.682.0",
+    "@fluentui/react-components": "9.75.1",
+    "@fluentui/react-icons": "2.0.345",
     "@types/pg": "^8.15.5",
     "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",
