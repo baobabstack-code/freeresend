@@ -1,27 +1,27 @@
 {
-  "name": "freeresend",
+  "name": "baobab-mail",
   "version": "1.0.0",
-  "description": "Self-hosted, open-source alternative to Resend for sending transactional emails with Amazon SES",
-  "author": "Emad Ibrahim <eibrahim@gmail.com> (https://x.com/eibrahim)",
+  "description": "Baobab Mail by Baobab Stack: a Resend-compatible transactional email API that sends through Brevo or Amazon SES",
+  "author": "Baobab Stack (https://www.baobabstack.co.zw)",
   "license": "MIT",
-  "homepage": "https://github.com/eibrahim/freeresend#readme",
+  "homepage": "https://mail.baobabstack.co.zw",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/eibrahim/freeresend.git"
+    "url": "git+https://github.com/baobabstack-code/freeresend.git"
   },
   "bugs": {
-    "url": "https://github.com/eibrahim/freeresend/issues"
+    "url": "https://github.com/baobabstack-code/freeresend/issues"
   },
   "keywords": [
     "email",
-    "resend",
-    "alternative",
-    "self-hosted",
-    "amazon-ses",
     "transactional-email",
     "email-api",
+    "resend-compatible",
+    "brevo",
+    "amazon-ses",
     "nextjs",
-    "typescript"
+    "typescript",
+    "baobab-stack"
   ],
   "scripts": {
     "dev": "next dev --turbopack",
@@ -75,5 +75,8 @@
     "tailwindcss": "^4",
     "ts-jest": "^29.4.1",
     "typescript": "^5"
-  }
+  },
+  "contributors": [
+    "Emad Ibrahim <eibrahim@gmail.com> (original FreeResend author)"
+  ]
 }

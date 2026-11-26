@@ -1,32 +1,25 @@
-# FreeResend
+# Baobab Mail
 
-**A self-hosted, open-source alternative to Resend for sending transactional emails.**
+**A Resend-compatible transactional email API by [Baobab Stack](https://www.baobabstack.co.zw).**
 
-FreeResend allows you to host your own email service using Amazon SES and optionally Digital Ocean for DNS management. It provides a Resend-compatible API so you can use it as a drop-in replacement.
+Baobab Mail sends email from your own domain through **Brevo** (free tier, no card needed) or **Amazon SES**. It provides a Resend-compatible API, so existing Resend code works by changing the base URL and API key. Live at **https://mail.baobabstack.co.zw**.
 
-> 📰 **Stay updated**: Get the latest frontend development insights delivered weekly with [**Frontend Weekly**](https://www.frontendweekly.co/) - curated by the author of FreeResend!
+> Baobab Mail is built on the open-source [FreeResend](https://github.com/eibrahim/freeresend) project (MIT licence).
 
-> 🧭 **Need a production rollout checklist?** FreeResend stays MIT-licensed and free to self-host. The optional [$12 Self-Hosted Launch Kit](https://www.freeresend.com/launch-kit) gives you a DNS, SES, webhook, smoke-test, and rollback checklist while supporting the project. You can also [buy it directly on Stripe](https://buy.stripe.com/4gMeVc3bdaJ20y7crTaMU00).
-
-> 🔎 **Want a second set of eyes before launch?** The optional [$12 FreeResend Deployment Review](https://www.freeresend.com/deployment-review) is a narrow manual review of one self-hosted rollout plan. Stripe collects your deployment URL or GitHub issue and main SES/DNS concern. You can also [book it directly on Stripe](https://buy.stripe.com/3cIcN49zBcRagx5dvXaMU01).
-
-> 📬 **Checking DNS before SES launch?** Run the free [Email DNS Readiness Checker](https://www.freeresend.com/tools/email-dns-checker) for SPF, DMARC, DKIM, and MX records before sending production traffic.
-
-> 📨 **Need SES production access?** Use the free [SES Production Request Helper](https://www.freeresend.com/tools/ses-production-request-helper) to draft a reviewer-friendly request without sharing secrets or customer data.
+> 📬 **Checking DNS before launch?** Run the free [Email DNS Readiness Checker](https://mail.baobabstack.co.zw/tools/email-dns-checker) for SPF, DMARC, DKIM and MX records.
 
 ## Features
 
-- 🚀 **100% Resend-compatible** - True drop-in replacement using environment variables
-- 🏠 **Self-hosted** - Full control over your email infrastructure
-- 📧 **Amazon SES integration** - Reliable email delivery with DKIM support
-- 🌐 **Automatic DNS setup** - Integration with Digital Ocean for DNS record creation
-- 🔐 **DKIM authentication** - Automatic DKIM key generation and DNS record creation
-- 🔑 **API key management** - Generate and manage multiple API keys per domain
-- 📊 **Email logging** - Track all sent emails with delivery status and logs
-- 🎯 **Domain verification** - Automated domain verification with SES
-- 🔒 **Secure** - JWT-based authentication and robust API key validation
-- 🐳 **Docker ready** - Containerized deployment with Docker Compose
-- 📝 **Comprehensive logging** - Detailed email logs with webhook support
+- 🚀 **Resend-compatible API** - drop-in replacement using environment variables
+- ✉️ **Two providers** - Brevo (free plan) or Amazon SES, chosen with `EMAIL_PROVIDER`
+- 🌐 **Automatic DNS setup** - the dashboard shows the exact records to add, and can create them in DigitalOcean
+- 🔐 **DKIM, SPF and DMARC** - records generated per domain
+- 📈 **Delivery tracking** - delivered, bounced and spam events arrive by webhook and update each email's status
+- 🔑 **API key management** - multiple keys per domain
+- 📊 **Email logs** - every email with its status, content preview and event timeline
+- 🎨 **Fluent UI dashboard** - light and dark mode, works on phones
+- 🔒 **Secure** - JWT sessions, hashed API keys, token-protected webhooks
+- 🐳 **Docker and Kubernetes ready**
 
 ## Quick Start
 
@@ -34,7 +27,7 @@ FreeResend allows you to host your own email service using Amazon SES and option
 
 - Node.js 18+
 - PostgreSQL database (local or hosted)
-- Amazon AWS account with SES access
+- A Brevo account (free) **or** an Amazon AWS account with SES access
 - Digital Ocean account (optional, for automatic DNS management)
 
 ### Installation
@@ -140,16 +133,16 @@ If you want automatic DNS record creation:
 2. Add your domains to Digital Ocean's DNS management
 3. Set the `DO_API_TOKEN` environment variable
 
-## Using FreeResend with Resend SDK
+## Using Baobab Mail with Resend SDK
 
-FreeResend is **100% compatible** with the [Resend Node.js SDK](https://github.com/resend/resend-node)!
+Baobab Mail is **100% compatible** with the [Resend Node.js SDK](https://github.com/resend/resend-node)!
 
 ### Method 1: Environment Variable (Recommended)
 
 Set the `RESEND_BASE_URL` environment variable:
 
 ```bash
-export RESEND_BASE_URL="https://your-freeresend-domain.com/api"
+export RESEND_BASE_URL="https://mail.baobabstack.co.zw/api"
 ```
 
 Then use Resend exactly as before:
@@ -157,8 +150,8 @@ Then use Resend exactly as before:
 ```javascript
 import { Resend } from "resend";
 
-// No changes needed - FreeResend API key works with Resend SDK!
-const resend = new Resend("your-freeresend-api-key");
+// No changes needed - Baobab Mail API key works with Resend SDK!
+const resend = new Resend("your-baobab-mail-api-key");
 
 const { data, error } = await resend.emails.send({
   from: "onboarding@yourdomain.com",
@@ -171,10 +164,10 @@ const { data, error } = await resend.emails.send({
 ### Method 2: Direct API
 
 ```javascript
-const response = await fetch("https://your-freeresend-domain.com/api/emails", {
+const response = await fetch("https://mail.baobabstack.co.zw/api/emails", {
   method: "POST",
   headers: {
-    Authorization: "Bearer your-freeresend-api-key",
+    Authorization: "Bearer your-baobab-mail-api-key",
     "Content-Type": "application/json",
   },
   body: JSON.stringify({
@@ -218,7 +211,7 @@ const response = await fetch("https://your-freeresend-domain.com/api/emails", {
 
 ## Domain Setup Process
 
-1. **Add domain** in the FreeResend dashboard
+1. **Add domain** in the Baobab Mail dashboard
 2. **DNS Records** will be automatically created (if Digital Ocean is configured) or displayed for manual setup:
 
    - **TXT record** - `_amazonses.yourdomain.com` for SES domain verification
@@ -229,11 +222,11 @@ const response = await fetch("https://your-freeresend-domain.com/api/emails", {
 
 3. **Verify domain** - Click "Check Verification" once DNS records are live
 4. **Create API key** - Generate API keys for your verified domain
-5. **Start sending** - Use the API key with FreeResend or Resend SDK
+5. **Start sending** - Use the API key with Baobab Mail or Resend SDK
 
 ## Testing Your Setup
 
-FreeResend includes test scripts to verify your installation:
+Baobab Mail includes test scripts to verify your installation:
 
 ### Quick Test
 
@@ -282,10 +275,10 @@ Both scripts will:
 - ✅ Make sure your IAM policy includes **DKIM permissions**: `ses:VerifyDomainDkim` and `ses:GetIdentityDkimAttributes`
 - ✅ Verify your AWS account is out of SES sandbox mode
 
-**Q: Resend SDK not working with FreeResend**
+**Q: Resend SDK not working with Baobab Mail**
 
 - ✅ Set environment variable: `export RESEND_BASE_URL="https://your-domain.com/api"`
-- ✅ Use FreeResend API key (starts with `frs_`), not Resend API key
+- ✅ Use Baobab Mail API key (starts with `frs_`), not Resend API key
 
 ## Production Deployment
 
@@ -312,7 +305,7 @@ CMD ["npm", "start"]
 
 ### Vercel Deployment
 
-FreeResend can be deployed on Vercel with some configuration:
+Baobab Mail can be deployed on Vercel with some configuration:
 
 1. Connect your GitHub repo to Vercel
 2. Set environment variables in Vercel dashboard
@@ -381,7 +374,7 @@ We welcome contributions! Here's how to get started:
 ### Development Setup
 
 1. **Fork the repository** on GitHub
-2. **Clone your fork**: `git clone https://github.com/eibrahim/freeresend.git`
+2. **Clone your fork**: `git clone https://github.com/baobabstack-code/freeresend.git`
 3. **Install dependencies**: `npm install`
 4. **Set up environment** following the Quick Start guide above
 5. **Run tests**: `node test-email.js`
@@ -419,13 +412,13 @@ MIT License - see LICENSE file for details.
 ## Support
 
 - 📖 **Documentation**: Check SETUP.md for detailed setup instructions
-- 🧭 **Launch Kit**: Optional [$12 self-hosted deployment checklist](https://www.freeresend.com/launch-kit)
-- 🔎 **Deployment Review**: Optional [$12 one-page review of your SES, DNS, webhook, and launch-risk plan](https://www.freeresend.com/deployment-review)
-- 📬 **DNS Checker**: Free [email DNS readiness checker](https://www.freeresend.com/tools/email-dns-checker) for SPF, DMARC, DKIM, and MX records
-- 📨 **SES Request Helper**: Free [SES production access request draft helper](https://www.freeresend.com/tools/ses-production-request-helper) for a safe, public-data-only AWS support request
-- 🐛 **Issues**: Report bugs via [GitHub Issues](https://github.com/eibrahim/freeresend/issues)
+- 🧭 **Launch Kit**: Optional [$12 self-hosted deployment checklist](https://mail.baobabstack.co.zw/launch-kit)
+- 🔎 **Deployment Review**: Optional [$12 one-page review of your SES, DNS, webhook, and launch-risk plan](https://mail.baobabstack.co.zw/deployment-review)
+- 📬 **DNS Checker**: Free [email DNS readiness checker](https://mail.baobabstack.co.zw/tools/email-dns-checker) for SPF, DMARC, DKIM, and MX records
+- 📨 **SES Request Helper**: Free [SES production access request draft helper](https://mail.baobabstack.co.zw/tools/ses-production-request-helper) for a safe, public-data-only AWS support request
+- 🐛 **Issues**: Report bugs via [GitHub Issues](https://github.com/baobabstack-code/freeresend/issues)
 - 💡 **Feature Requests**: Suggest improvements via GitHub Issues
-- 🚀 **Professional Support**: Custom development and enterprise support available via [EliteCoders](https://elitecoders.co/)
+- 🚀 **Professional Support**: Custom development and support from [Baobab Stack](https://www.baobabstack.co.zw/contact)
 
 ## Roadmap
 
@@ -439,26 +432,12 @@ MIT License - see LICENSE file for details.
 
 ---
 
-## About the Author
+## About
 
-FreeResend is built and maintained by **[Emad Ibrahim](https://x.com/eibrahim)** - a software engineer and entrepreneur passionate about creating developer tools and open-source solutions.
+Baobab Mail is built and run by **[Baobab Stack](https://www.baobabstack.co.zw)**, a software company in Harare, Zimbabwe that designs and builds web, mobile and AI products.
 
-### 👨‍💻 **Connect with Emad**
+Need help with email infrastructure, an integration, or custom features? [Get in touch with Baobab Stack →](https://www.baobabstack.co.zw/contact)
 
-- 🐦 **Twitter**: [@eibrahim](https://x.com/eibrahim) - Follow for updates on FreeResend and web development insights
-- 📧 **Email**: [eibrahim@gmail.com](mailto:eibrahim@gmail.com)
-- 📰 **Newsletter**: [Frontend Weekly](https://www.frontendweekly.co/) - The best frontend development articles delivered weekly
-- 💼 **Professional Services**: Custom development and enterprise support via [EliteCoders](https://elitecoders.co/)
+### Credits
 
-### 🚀 **Need Custom Development?**
-
-If you need help with:
-
-- 🏗️ **Custom email infrastructure** modifications
-- 🚀 **Enterprise deployments** and scaling
-- 🔧 **Integration** with your existing systems
-- 🎯 **Feature development** beyond the roadmap
-
-**[Get in touch with EliteCoders →](https://elitecoders.co/)**
-
-_Building powerful software solutions for businesses worldwide_ 🌎
+Baobab Mail is based on [FreeResend](https://github.com/eibrahim/freeresend) by Emad Ibrahim, released under the MIT licence. The original copyright notice is kept in [LICENSE](LICENSE).

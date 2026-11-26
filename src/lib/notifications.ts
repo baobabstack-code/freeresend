@@ -1,4 +1,5 @@
 import { sendEmail } from "./email-provider";
+import { site } from "@/config/site";
 
 export interface WaitlistNotificationData {
   email: string;
@@ -16,7 +17,7 @@ export interface WaitlistNotificationData {
 
 export async function sendWaitlistNotification(data: WaitlistNotificationData): Promise<void> {
   const adminEmail = process.env.ADMIN_EMAIL;
-  const fromEmail = process.env.FROM_EMAIL || "info@freeresend.com";
+  const fromEmail = process.env.FROM_EMAIL || site.defaultFromEmail;
 
   if (!adminEmail) {
     console.warn("ADMIN_EMAIL not configured, skipping waitlist notification");
@@ -48,7 +49,7 @@ export async function sendWaitlistNotification(data: WaitlistNotificationData): 
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; background-color: #f5f5f5; }
         .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }
-        .header { background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: white; padding: 30px; text-align: center; }
+        .header { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 30px; text-align: center; }
         .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
         .content { padding: 30px; }
         .signup-info { background: #f8fafc; border-radius: 6px; padding: 20px; margin: 20px 0; }
@@ -69,7 +70,7 @@ export async function sendWaitlistNotification(data: WaitlistNotificationData): 
       <div class="container">
         <div class="header">
           <h1>🚀 New Waitlist Signup</h1>
-          <p style="margin: 10px 0 0 0; opacity: 0.9;">Someone just joined the FreeResend hosted version waitlist!</p>
+          <p style="margin: 10px 0 0 0; opacity: 0.9;">Someone just joined the ${site.name} waitlist!</p>
         </div>
         
         <div class="content">
@@ -130,8 +131,8 @@ export async function sendWaitlistNotification(data: WaitlistNotificationData): 
         </div>
 
         <div class="footer">
-          <p>This notification was sent because someone joined the FreeResend hosted version waitlist.</p>
-          <p><strong>FreeResend Admin Notifications</strong> • ${new Date().getFullYear()}</p>
+          <p>This notification was sent because someone joined the ${site.name} waitlist.</p>
+          <p><strong>${site.name} Admin Notifications</strong> • ${new Date().getFullYear()}</p>
         </div>
       </div>
     </body>
@@ -153,12 +154,12 @@ ${utmInfo ? `UTM Parameters: ${utmInfo}` : ''}
 View all signups: ${process.env.NEXTAUTH_URL}/admin/waitlist
 
 ---
-FreeResend Admin Notifications
+${site.name} Admin Notifications
   `;
 
   try {
     await sendEmail({
-      from: `FreeResend Notifications <${fromEmail}>`,
+      from: `${site.name} Notifications <${fromEmail}>`,
       to: [adminEmail],
       subject,
       html,
@@ -177,8 +178,8 @@ FreeResend Admin Notifications
 }
 
 export async function sendWelcomeEmail(email: string, signupId: string): Promise<void> {
-  const fromEmail = process.env.FROM_EMAIL || "info@freeresend.com";
-  const subject = "Welcome to the FreeResend Waitlist! 🚀";
+  const fromEmail = process.env.FROM_EMAIL || site.defaultFromEmail;
+  const subject = `Welcome to the ${site.name} waitlist! 🚀`;
 
   const html = `
     <!DOCTYPE html>
@@ -186,11 +187,11 @@ export async function sendWelcomeEmail(email: string, signupId: string): Promise
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Welcome to FreeResend Waitlist</title>
+      <title>Welcome to ${site.name} Waitlist</title>
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; background-color: #f5f5f5; }
         .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }
-        .header { background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: white; padding: 40px 30px; text-align: center; }
+        .header { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 40px 30px; text-align: center; }
         .header h1 { margin: 0; font-size: 28px; font-weight: 600; }
         .content { padding: 40px 30px; }
         .highlight { background: #dbeafe; color: #1d4ed8; padding: 3px 8px; border-radius: 4px; font-weight: 500; }
@@ -211,7 +212,7 @@ export async function sendWelcomeEmail(email: string, signupId: string): Promise
         <div class="content">
           <p>Hi there!</p>
           
-          <p>Thanks for joining the <span class="highlight">FreeResend hosted version waitlist</span>! You're now in line to be among the first to experience our fully managed email service.</p>
+          <p>Thanks for joining the <span class="highlight">${site.name} waitlist</span>! You're now in line to be among the first to experience our fully managed email service.</p>
 
           <div class="benefits">
             <h3 style="margin: 0 0 20px 0; color: #1e293b;">What you can expect:</h3>
@@ -248,14 +249,14 @@ export async function sendWelcomeEmail(email: string, signupId: string): Promise
           <p>We'll notify you as soon as the hosted version becomes available. In the meantime, you can:</p>
           
           <ul>
-            <li>Try the <strong>self-hosted version</strong> on GitHub (it's open source!)</li>
-            <li>Join our community discussions</li>
-            <li>Follow us for updates and tips</li>
+            <li>Explore ${site.name} and see how it works with Brevo or Amazon SES</li>
+            <li>Check your domain's email setup with our free DNS checker</li>
+            <li>Reply to this email with any questions for the ${site.company} team</li>
           </ul>
 
           <div style="text-align: center;">
-            <a href="https://github.com/eibrahim/freeresend" class="cta">
-              Explore Self-Hosted Version
+            <a href="${site.url}" class="cta">
+              Visit ${site.name}
             </a>
           </div>
 
@@ -265,8 +266,8 @@ export async function sendWelcomeEmail(email: string, signupId: string): Promise
         </div>
 
         <div class="footer">
-          <p>You're receiving this because you joined the FreeResend waitlist.</p>
-          <p><strong>FreeResend</strong> • Making email infrastructure affordable for everyone</p>
+          <p>You're receiving this because you joined the ${site.name} waitlist.</p>
+          <p><strong>${site.name}</strong> by ${site.company} • ${site.companyUrl}</p>
           <p style="font-size: 12px; margin-top: 15px;">Signup ID: ${signupId}</p>
         </div>
       </div>
@@ -275,11 +276,11 @@ export async function sendWelcomeEmail(email: string, signupId: string): Promise
   `;
 
   const text = `
-🎉 You're on the FreeResend waitlist!
+🎉 You're on the ${site.name} waitlist!
 
 Hi there!
 
-Thanks for joining the FreeResend hosted version waitlist! You're now in line to be among the first to experience our fully managed email service.
+Thanks for joining the ${site.name} waitlist! You're now in line to be among the first to experience our fully managed email service.
 
 What you can expect:
 • 50-85% cost savings compared to premium email services
@@ -287,13 +288,13 @@ What you can expect:
 • Drop-in compatibility with Resend API
 • Lightning fast setup - from signup to sending in under 60 seconds
 
-We'll notify you as soon as the hosted version becomes available.
+We'll let you know as soon as your account is ready.
 
-In the meantime, you can try the self-hosted version on GitHub:
-https://github.com/eibrahim/freeresend
+In the meantime, you can learn more at:
+${site.url}
 
 Thanks for joining us!
-The FreeResend Team
+The ${site.company} team
 
 ---
 Signup ID: ${signupId}
@@ -301,7 +302,7 @@ Signup ID: ${signupId}
 
   try {
     await sendEmail({
-      from: `FreeResend <${fromEmail}>`,
+      from: `${site.name} <${fromEmail}>`,
       to: [email],
       subject,
       html,
