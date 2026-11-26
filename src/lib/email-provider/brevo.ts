@@ -121,6 +121,8 @@ interface BrevoDomainConfig {
 const RECORD_LABELS: Record<string, string> = {
   brevo_code: "Brevo domain verification",
   dkim_record: "DKIM signature",
+  dkim1Record: "DKIM signature (1 of 2)",
+  dkim2Record: "DKIM signature (2 of 2)",
   dmarc_record: "DMARC policy",
 };
 
@@ -163,10 +165,20 @@ export async function ensureBrevoWebhook(): Promise<void> {
   }
   const url = `${base.replace(/\/$/, "")}/api/webhooks/brevo?token=${encodeURIComponent(secret)}`;
   try {
-    const existing = await brevoFetch<{ webhooks?: Array<{ url?: string }> }>(
-      "/webhooks?type=transactional"
-    );
-    if (existing?.webhooks?.some((w) => w.url === url)) return;
+    let existing: Array<{ url?: string }> = [];
+    try {
+      const list = await brevoFetch<{ webhooks?: Array<{ url?: string }> }>(
+        "/webhooks?type=transactional"
+      );
+      existing = list?.webhooks ?? [];
+    } catch (error) {
+      // Brevo answers "document_not_found" (400/404) when there are no webhooks yet.
+      const notFound =
+        error instanceof BrevoApiError &&
+        (error.status === 404 || error.code === "document_not_found");
+      if (!notFound) throw error;
+    }
+    if (existing.some((w) => w.url === url)) return;
     await brevoFetch("/webhooks", {
       method: "POST",
       body: JSON.stringify({

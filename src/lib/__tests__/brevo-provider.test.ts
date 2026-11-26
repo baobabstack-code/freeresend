@@ -3,6 +3,7 @@
  */
 import {
   brevoProvider,
+  ensureBrevoWebhook,
   buildSendPayload,
   mapBrevoDnsRecords,
   parseAddress,
@@ -93,6 +94,17 @@ describe("mapBrevoDnsRecords", () => {
     ]);
   });
 
+  it("labels Brevo's split DKIM records", () => {
+    const records = mapBrevoDnsRecords("example.com", {
+      dkim1Record: { host_name: "brevo1._domainkey", type: "CNAME", value: "b1.example.dkim.brevo.com", status: true },
+      dkim2Record: { host_name: "brevo2._domainkey", type: "CNAME", value: "b2.example.dkim.brevo.com", status: true },
+    });
+    expect(records.map((r) => [r.type, r.name, r.description])).toEqual([
+      ["CNAME", "brevo1._domainkey.example.com", "DKIM signature (1 of 2) (found)"],
+      ["CNAME", "brevo2._domainkey.example.com", "DKIM signature (2 of 2) (found)"],
+    ]);
+  });
+
   it("returns [] when there are no records", () => {
     expect(mapBrevoDnsRecords("example.com", undefined)).toEqual([]);
   });
@@ -150,6 +162,38 @@ describe("brevoProvider", () => {
       .mockReturnValueOnce(respond(400, { code: "invalid_parameter", message: "DNS records not properly configured" }));
     await expect(brevoProvider.checkDomainStatus("example.com")).resolves.toBe("pending");
     expect(fetchMock.mock.calls[1][1].method).toBe("PUT");
+  });
+});
+
+describe("ensureBrevoWebhook", () => {
+  beforeEach(() => {
+    process.env.NEXTAUTH_URL = "https://mail.example.com/";
+    process.env.BREVO_WEBHOOK_SECRET = "s3cret";
+  });
+  afterEach(() => {
+    delete process.env.NEXTAUTH_URL;
+    delete process.env.BREVO_WEBHOOK_SECRET;
+  });
+
+  it("creates the webhook when Brevo says none exist yet", async () => {
+    fetchMock
+      .mockReturnValueOnce(respond(400, { code: "document_not_found", message: "Webhook record does not exist" }))
+      .mockReturnValueOnce(respond(201, { id: 7 }));
+    await ensureBrevoWebhook();
+    const [url, init] = fetchMock.mock.calls[1];
+    expect(url).toBe("https://api.brevo.com/v3/webhooks");
+    const body = JSON.parse(init.body);
+    expect(body.url).toBe("https://mail.example.com/api/webhooks/brevo?token=s3cret");
+    expect(body.type).toBe("transactional");
+    expect(body.events).toEqual(expect.arrayContaining(["delivered", "hardBounce", "spam"]));
+  });
+
+  it("does nothing when the webhook is already registered", async () => {
+    fetchMock.mockReturnValueOnce(
+      respond(200, { webhooks: [{ url: "https://mail.example.com/api/webhooks/brevo?token=s3cret" }] })
+    );
+    await ensureBrevoWebhook();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
