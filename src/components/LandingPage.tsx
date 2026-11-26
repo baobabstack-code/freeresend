@@ -138,7 +138,7 @@ const FEATURES = [
 const STEPS = [
   {
     title: "Add your domain",
-    description: "Register the domain you want to send from and pick Brevo or Amazon SES as its provider.",
+    description: "Register the domain you want to send from. Baobab Mail sets it up with your provider, Brevo or Amazon SES.",
   },
   {
     title: "Publish the DNS records",
@@ -512,7 +512,7 @@ export default function LandingPage() {
         <SectionHead
           eyebrow="Providers"
           title="Your provider, your choice"
-          description="Set the provider per domain. Start free with Brevo and move to Amazon SES when your volume calls for it."
+          description="Choose one provider for your account. Start free with Brevo and switch to Amazon SES when your volume calls for it."
         />
         <div className={s.grid2}>
           {PROVIDERS.map((p) => (
