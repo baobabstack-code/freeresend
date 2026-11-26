@@ -47,4 +47,43 @@ describe("email DNS readiness", () => {
     expect(assessment.overallStatus).toBe("pass");
     expect(assessment.checks.every((check) => check.status === "pass")).toBe(true);
   });
+
+  it("recognises Brevo SPF, DKIM, and verification records", () => {
+    const assessment = analyzeEmailDnsRecords({
+      domain: "example.com",
+      dkimSelector: "mail",
+      spfRecords: [
+        "v=spf1 include:spf.brevo.com ~all",
+        "brevo-code:0123456789abcdef0123456789abcdef",
+      ],
+      dmarcRecords: ["v=DMARC1; p=reject"],
+      dkimTxtRecords: ["k=rsa;p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQ"],
+      dkimCnameRecords: [],
+      mxRecords: ["10 inbound.example.com"],
+    });
+
+    expect(assessment.overallStatus).toBe("pass");
+    expect(assessment.providers).toEqual(["brevo"]);
+    const spf = assessment.checks.find((check) => check.id === "spf");
+    expect(spf?.status).toBe("pass");
+    expect(spf?.summary).toMatch(/Brevo/);
+    expect(spf?.details.join(" ")).toMatch(/brevo-code/);
+    expect(assessment.checks.find((check) => check.id === "dkim")?.status).toBe("pass");
+  });
+
+  it("detects a Brevo DKIM CNAME alongside Amazon SES SPF", () => {
+    const assessment = analyzeEmailDnsRecords({
+      domain: "example.com",
+      dkimSelector: "brevo1",
+      spfRecords: ["v=spf1 include:amazonses.com include:spf.brevo.com ~all"],
+      dmarcRecords: ["v=DMARC1; p=quarantine"],
+      dkimTxtRecords: [],
+      dkimCnameRecords: ["b1.example-com.dkim.brevo.com"],
+      mxRecords: ["10 inbound.example.com"],
+    });
+
+    expect(assessment.providers).toEqual(["brevo", "ses"]);
+    expect(assessment.checks.find((check) => check.id === "spf")?.summary).toMatch(/Amazon SES and Brevo|Brevo and Amazon SES/);
+    expect(assessment.checks.find((check) => check.id === "dkim")?.details[0]).toMatch(/Brevo/);
+  });
 });

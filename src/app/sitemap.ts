@@ -1,52 +1,27 @@
 import type { MetadataRoute } from "next";
+import { site } from "@/config/site";
 
-const baseUrl = "https://www.freeresend.com";
+const pages: Array<{
+  path: string;
+  changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
+  priority: number;
+}> = [
+  { path: "", changeFrequency: "weekly", priority: 1 },
+  { path: "/pricing", changeFrequency: "monthly", priority: 0.8 },
+  { path: "/launch-kit", changeFrequency: "monthly", priority: 0.7 },
+  { path: "/deployment-review", changeFrequency: "monthly", priority: 0.7 },
+  { path: "/tools/email-dns-checker", changeFrequency: "monthly", priority: 0.75 },
+  { path: "/tools/ses-production-request-helper", changeFrequency: "monthly", priority: 0.74 },
+  { path: "/guides/ses-production-readiness", changeFrequency: "monthly", priority: 0.72 },
+];
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
 
-  return [
-    {
-      url: baseUrl,
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 1,
-    },
-    {
-      url: `${baseUrl}/pricing`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.8,
-    },
-    {
-      url: `${baseUrl}/launch-kit`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.7,
-    },
-    {
-      url: `${baseUrl}/deployment-review`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.7,
-    },
-    {
-      url: `${baseUrl}/tools/email-dns-checker`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.75,
-    },
-    {
-      url: `${baseUrl}/tools/ses-production-request-helper`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.74,
-    },
-    {
-      url: `${baseUrl}/guides/ses-production-readiness`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.72,
-    },
-  ];
+  return pages.map((page) => ({
+    url: `${site.url}${page.path}`,
+    lastModified: now,
+    changeFrequency: page.changeFrequency,
+    priority: page.priority,
+  }));
 }

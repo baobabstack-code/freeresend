@@ -2,87 +2,171 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import {
-  AlertTriangle,
-  CheckCircle2,
-  ExternalLink,
-  Info,
-  Loader2,
-  MailCheck,
-  Search,
-  XCircle,
-} from "lucide-react";
+  Badge,
+  Body1,
+  Button,
+  Caption1,
+  Card,
+  Field,
+  Input,
+  makeStyles,
+  mergeClasses,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  Spinner,
+  Subtitle1,
+  Text,
+  Title1,
+  Title3,
+  tokens,
+  type BadgeProps,
+} from "@fluentui/react-components";
+import {
+  CheckmarkCircle20Filled,
+  DismissCircle20Filled,
+  Info20Filled,
+  MailCheckmark24Regular,
+  Open16Regular,
+  Search20Regular,
+  Warning20Filled,
+} from "@fluentui/react-icons";
 import { deploymentReview, launchKit } from "@/config/launch-kit";
-import type { EmailDnsAssessment, EmailDnsCheck, EmailDnsStatus } from "@/lib/email-dns-readiness";
+import { site } from "@/config/site";
+import {
+  emailDnsProviderLabels,
+  type EmailDnsAssessment,
+  type EmailDnsCheck,
+  type EmailDnsStatus,
+} from "@/lib/email-dns-readiness";
+import { Container, Eyebrow } from "./ui/Layout";
+import { LinkButton } from "./ui/links";
+import { IconTile, PromoBand } from "./pages/PageBits";
 
-const statusStyles: Record<EmailDnsStatus, { label: string; icon: typeof CheckCircle2; className: string }> = {
-  pass: {
-    label: "Pass",
-    icon: CheckCircle2,
-    className: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  },
-  warn: {
-    label: "Review",
-    icon: AlertTriangle,
-    className: "border-amber-200 bg-amber-50 text-amber-900",
-  },
-  fail: {
-    label: "Fix",
-    icon: XCircle,
-    className: "border-red-200 bg-red-50 text-red-800",
-  },
-  info: {
-    label: "Info",
-    icon: Info,
-    className: "border-blue-200 bg-blue-50 text-blue-800",
-  },
+const statusStyles: Record<
+  EmailDnsStatus,
+  { label: string; icon: React.ReactElement; color: BadgeProps["color"] }
+> = {
+  pass: { label: "Pass", icon: <CheckmarkCircle20Filled />, color: "success" },
+  warn: { label: "Review", icon: <Warning20Filled />, color: "warning" },
+  fail: { label: "Fix", icon: <DismissCircle20Filled />, color: "danger" },
+  info: { label: "Info", icon: <Info20Filled />, color: "informative" },
 };
 
-function StatusPill({ status }: { status: EmailDnsStatus }) {
-  const style = statusStyles[status];
-  const Icon = style.icon;
+const useStyles = makeStyles({
+  section: {
+    paddingTop: "32px",
+    paddingBottom: "48px",
+    "@media (min-width: 768px)": { paddingTop: "56px", paddingBottom: "72px" },
+  },
+  layout: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: "24px",
+    alignItems: "start",
+    "@media (min-width: 1024px)": { gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)", gap: "32px" },
+  },
+  formCard: { display: "flex", flexDirection: "column", gap: "16px", padding: "24px" },
+  title: {
+    fontSize: tokens.fontSizeHero700,
+    lineHeight: tokens.lineHeightHero700,
+    "@media (min-width: 768px)": { fontSize: tokens.fontSizeHero800, lineHeight: tokens.lineHeightHero800 },
+  },
+  muted: { color: tokens.colorNeutralForeground2 },
+  subtle: { color: tokens.colorNeutralForeground3 },
+  form: { display: "flex", flexDirection: "column", gap: "16px" },
+  column: { display: "flex", flexDirection: "column", gap: "16px", minWidth: 0 },
+  summaryCard: { display: "flex", flexDirection: "column", gap: "8px", padding: "24px" },
+  summaryHead: { display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" },
+  summaryText: { display: "flex", flexDirection: "column", gap: "8px", minWidth: 0, flex: "1 1 240px" },
+  domainLabel: { overflowWrap: "anywhere" },
+  providers: { display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" },
+  checks: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: "16px",
+    "@media (min-width: 768px)": { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" },
+  },
+  checkCard: { display: "flex", flexDirection: "column", gap: "12px", padding: "20px", minWidth: 0 },
+  checkHead: { display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" },
+  checkTitle: { display: "flex", flexDirection: "column", gap: "4px", minWidth: 0, flex: "1 1 160px" },
+  details: { margin: 0, paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "6px" },
+  detail: { color: tokens.colorNeutralForeground2, overflowWrap: "anywhere" },
+  records: {
+    display: "flex",
+    flexDirection: "column",
+    borderRadius: tokens.borderRadiusMedium,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    backgroundColor: tokens.colorNeutralBackground3,
+    overflow: "hidden",
+  },
+  record: {
+    display: "block",
+    padding: "8px 12px",
+    fontFamily: tokens.fontFamilyMonospace,
+    fontSize: tokens.fontSizeBase200,
+    lineHeight: tokens.lineHeightBase300,
+    color: tokens.colorNeutralForeground1,
+    overflowWrap: "anywhere",
+    wordBreak: "break-all",
+    ":not(:last-child)": { borderBottom: `1px solid ${tokens.colorNeutralStroke2}` },
+  },
+  placeholder: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+    padding: "20px",
+    borderRadius: tokens.borderRadiusLarge,
+    border: `1px dashed ${tokens.colorNeutralStroke1}`,
+    color: tokens.colorNeutralForeground3,
+  },
+  bar: { height: "8px", borderRadius: "4px", backgroundColor: tokens.colorNeutralBackground4 },
+  barShort: { width: "64px" },
+  barMid: { width: "66%" },
+});
 
+function StatusBadge({ status }: { status: EmailDnsStatus }) {
+  const style = statusStyles[status];
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${style.className}`}>
-      <Icon className="h-3.5 w-3.5" />
+    <Badge appearance="tint" color={style.color} icon={style.icon} size="large" shape="rounded">
       {style.label}
-    </span>
+    </Badge>
   );
 }
 
 function CheckCard({ check }: { check: EmailDnsCheck }) {
+  const s = useStyles();
   return (
-    <article className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">{check.title}</h3>
-          <p className="mt-1 text-sm text-gray-600">{check.summary}</p>
+    <Card className={s.checkCard}>
+      <div className={s.checkHead}>
+        <div className={s.checkTitle}>
+          <Subtitle1 as="h3">{check.title}</Subtitle1>
+          <Body1 className={s.muted}>{check.summary}</Body1>
         </div>
-        <StatusPill status={check.status} />
+        <StatusBadge status={check.status} />
       </div>
-
-      <ul className="mt-4 space-y-2 text-sm leading-6 text-gray-600">
+      <ul className={s.details}>
         {check.details.map((detail) => (
-          <li key={detail} className="flex gap-2">
-            <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-gray-400" />
-            <span>{detail}</span>
+          <li key={detail}>
+            <Body1 className={s.detail}>{detail}</Body1>
           </li>
         ))}
       </ul>
-
       {check.records.length > 0 ? (
-        <div className="mt-4 overflow-hidden rounded-md border border-gray-100 bg-gray-50">
+        <div className={s.records} aria-label={`${check.title} records found`}>
           {check.records.map((record) => (
-            <code key={record} className="block break-words px-3 py-2 text-xs leading-5 text-gray-700">
+            <code key={record} className={s.record}>
               {record}
             </code>
           ))}
         </div>
       ) : null}
-    </article>
+    </Card>
   );
 }
 
 export default function EmailDnsChecker() {
+  const s = useStyles();
   const [domain, setDomain] = useState("");
   const [dkimSelector, setDkimSelector] = useState("");
   const [result, setResult] = useState<EmailDnsAssessment | null>(null);
@@ -123,140 +207,151 @@ export default function EmailDnsChecker() {
   }
 
   return (
-    <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-            <MailCheck className="h-6 w-6" />
-          </div>
-          <h1 className="text-3xl font-bold leading-tight text-gray-900 sm:text-4xl">
-            Email DNS readiness checker
-          </h1>
-          <p className="mt-4 leading-7 text-gray-600">
-            Check SPF, DMARC, MX, and one DKIM selector before moving a FreeResend or Amazon SES domain into production.
-          </p>
+    <section className={s.section}>
+      <Container>
+        <div className={s.layout}>
+          <Card className={s.formCard}>
+            <IconTile icon={<MailCheckmark24Regular />} />
+            <Eyebrow>Free tool</Eyebrow>
+            <Title1 as="h1" className={s.title}>
+              Email DNS readiness checker
+            </Title1>
+            <Text className={s.muted}>
+              Check SPF, DMARC, MX and one DKIM selector before sending production email from a domain. Works for
+              domains sending through Brevo or Amazon SES with {site.name}.
+            </Text>
 
-          <form onSubmit={handleSubmit} className="mt-7 space-y-4">
-            <div>
-              <label htmlFor="domain" className="text-sm font-semibold text-gray-900">
-                Sending domain
-              </label>
-              <input
-                id="domain"
-                value={domain}
-                onChange={(event) => setDomain(event.target.value)}
-                placeholder="example.com"
-                className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                autoComplete="off"
-              />
-            </div>
+            <form className={s.form} onSubmit={handleSubmit} noValidate>
+              <Field label="Sending domain" required>
+                <Input
+                  name="domain"
+                  value={domain}
+                  onChange={(_, d) => setDomain(d.value)}
+                  placeholder="example.com"
+                  autoComplete="off"
+                  spellCheck={false}
+                  disabled={loading}
+                />
+              </Field>
+              <Field
+                label="DKIM selector"
+                hint="Optional. Use mail for Brevo, or one of the DKIM tokens shown in Amazon SES."
+              >
+                <Input
+                  name="dkimSelector"
+                  value={dkimSelector}
+                  onChange={(_, d) => setDkimSelector(d.value)}
+                  placeholder="mail"
+                  autoComplete="off"
+                  spellCheck={false}
+                  disabled={loading}
+                />
+              </Field>
+              <Button
+                type="submit"
+                appearance="primary"
+                size="large"
+                disabled={loading || !domain.trim()}
+                icon={loading ? <Spinner size="tiny" /> : <Search20Regular />}
+              >
+                {loading ? "Checking DNS…" : "Run DNS check"}
+              </Button>
+            </form>
 
-            <div>
-              <label htmlFor="dkimSelector" className="text-sm font-semibold text-gray-900">
-                DKIM selector
-              </label>
-              <input
-                id="dkimSelector"
-                value={dkimSelector}
-                onChange={(event) => setDkimSelector(event.target.value)}
-                placeholder="optional"
-                className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                autoComplete="off"
-              />
-            </div>
+            {error ? (
+              <MessageBar intent="error">
+                <MessageBarBody>{error}</MessageBarBody>
+              </MessageBar>
+            ) : null}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-              <span>{loading ? "Checking DNS" : "Run DNS check"}</span>
-            </button>
-          </form>
+            <MessageBar intent="warning">
+              <MessageBarBody>
+                Never paste API keys, AWS keys, SMTP passwords, database URLs or private tokens into this checker.
+              </MessageBarBody>
+            </MessageBar>
+          </Card>
 
-          {error ? (
-            <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>
-          ) : null}
-
-          <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-            Never paste AWS keys, SMTP passwords, database URLs, or private tokens into this checker.
-          </div>
-        </div>
-
-        <div className="space-y-5">
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
-                  {result?.domain ?? "FreeResend"}
-                </p>
-                <h2 className="mt-2 text-2xl font-bold text-gray-900">{resultTitle}</h2>
-                <p className="mt-2 leading-7 text-gray-600">
-                  {result?.summary ??
-                    "Run the checker to see the records that most often block SES launches, then use the launch kit or review offer for the remaining rollout work."}
-                </p>
+          <div className={s.column} aria-live="polite">
+            <Card className={s.summaryCard}>
+              <div className={s.summaryHead}>
+                <div className={s.summaryText}>
+                  <Eyebrow>
+                    <span className={s.domainLabel}>{result?.domain ?? "Results"}</span>
+                  </Eyebrow>
+                  <Title3 as="h2">{resultTitle}</Title3>
+                  <Body1 className={s.muted}>
+                    {result?.summary ??
+                      "Run the checker to see the records that most often block a launch, then use the launch kit or deployment review for the rest of the rollout."}
+                  </Body1>
+                  {result && result.providers?.length ? (
+                    <div className={s.providers}>
+                      <Caption1 className={s.subtle}>Provider records found:</Caption1>
+                      {result.providers.map((provider) => (
+                        <Badge key={provider} appearance="outline" color="brand">
+                          {emailDnsProviderLabels[provider]}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                {result ? <StatusBadge status={result.overallStatus} /> : null}
               </div>
-              {result ? <StatusPill status={result.overallStatus} /> : null}
-            </div>
-          </div>
+            </Card>
 
-          {result ? (
-            <>
-              <div className="grid gap-4 md:grid-cols-2">
-                {result.checks.map((check) => (
-                  <CheckCard key={check.id} check={check} />
+            {result ? (
+              <>
+                <div className={s.checks}>
+                  {result.checks.map((check) => (
+                    <CheckCard key={check.id} check={check} />
+                  ))}
+                </div>
+                {result.lookupErrors.length > 0 ? (
+                  <MessageBar intent="info">
+                    <MessageBarBody>
+                      <MessageBarTitle>DNS lookup warnings</MessageBarTitle>
+                      {result.lookupErrors.join("; ")}
+                    </MessageBarBody>
+                  </MessageBar>
+                ) : null}
+              </>
+            ) : (
+              <div className={s.checks} aria-hidden="true">
+                {["SPF", "DMARC", "DKIM", "MX"].map((item) => (
+                  <div key={item} className={s.placeholder}>
+                    <div className={mergeClasses(s.bar, s.barShort)} />
+                    <Subtitle1>{item}</Subtitle1>
+                    <div className={s.bar} />
+                    <div className={mergeClasses(s.bar, s.barMid)} />
+                  </div>
                 ))}
               </div>
+            )}
 
-              {result.lookupErrors.length > 0 ? (
-                <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
-                  DNS lookup warnings: {result.lookupErrors.join("; ")}
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {["SPF", "DMARC", "DKIM", "MX"].map((item) => (
-                <div key={item} className="rounded-lg border border-dashed border-gray-200 bg-white p-5 text-gray-500">
-                  <div className="h-2 w-16 rounded-full bg-gray-100" />
-                  <div className="mt-4 text-lg font-semibold text-gray-700">{item}</div>
-                  <div className="mt-3 h-2 w-full rounded-full bg-gray-100" />
-                  <div className="mt-2 h-2 w-2/3 rounded-full bg-gray-100" />
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6">
-            <h2 className="text-xl font-bold text-emerald-950">Need a production pass?</h2>
-            <p className="mt-2 leading-7 text-emerald-900">
-              The checker only sees public DNS. The {deploymentReview.price} Deployment Review covers SES sandbox status,
-              region choice, DKIM alignment, webhook gaps, and the next launch fixes from your deployment URL.
-            </p>
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-              <a
-                href={deploymentReview.checkoutUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 py-3 font-semibold text-white transition-colors hover:bg-emerald-700"
-              >
-                <span>Book review for {deploymentReview.price}</span>
-                <ExternalLink className="h-4 w-4" />
-              </a>
-              <a
-                href={launchKit.checkoutUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-white px-5 py-3 font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
-              >
-                <span>Buy launch kit</span>
-                <ExternalLink className="h-4 w-4" />
-              </a>
-            </div>
+            <PromoBand
+              title="Need a production pass?"
+              actions={
+                <>
+                  <LinkButton
+                    href={deploymentReview.checkoutUrl}
+                    target="_blank"
+                    appearance="primary"
+                    icon={<Open16Regular />}
+                    iconPosition="after"
+                  >
+                    Book review for {deploymentReview.price}
+                  </LinkButton>
+                  <LinkButton href={launchKit.checkoutUrl} target="_blank" icon={<Open16Regular />} iconPosition="after">
+                    Buy launch kit
+                  </LinkButton>
+                </>
+              }
+            >
+              The checker only sees public DNS. The {deploymentReview.price} deployment review covers SES sandbox status,
+              region choice, DKIM alignment, webhook gaps and the next launch fixes from your deployment URL.
+            </PromoBand>
           </div>
         </div>
-      </div>
+      </Container>
     </section>
   );
 }

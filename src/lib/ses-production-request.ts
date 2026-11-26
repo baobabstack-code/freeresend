@@ -1,3 +1,5 @@
+import { site } from "@/config/site";
+
 export type SesProductionRequestInput = {
   sendingDomain: string;
   websiteUrl: string;
@@ -58,7 +60,7 @@ export function buildSesProductionRequest(input: SesProductionRequestInput): Ses
   const body = [
     "Hello AWS SES team,",
     "",
-    "I am requesting production access for Amazon SES so this account can send transactional email through a self-hosted FreeResend deployment.",
+    `I am requesting production access for Amazon SES so this account can send transactional email through ${site.name}, a Resend-compatible transactional email API configured to send via Amazon SES.`,
     "",
     `Sending domain: ${normalized.sendingDomain}`,
     `Website or app URL: ${normalized.websiteUrl}`,
