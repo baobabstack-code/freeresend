@@ -29,6 +29,7 @@ data:
       dns_records JSONB DEFAULT '[]',
       verification_token VARCHAR(255),
       smtp_credentials JSONB,
+      provider VARCHAR(20) NOT NULL DEFAULT 'ses',
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
@@ -64,6 +65,7 @@ data:
       attachments JSONB DEFAULT '[]',
       status VARCHAR(50) DEFAULT 'pending',
       ses_message_id VARCHAR(255),
+      provider VARCHAR(20) NOT NULL DEFAULT 'ses',
       error_message TEXT,
       webhook_data JSONB,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

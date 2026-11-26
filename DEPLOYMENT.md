@@ -32,6 +32,10 @@ Set these in Vercel Dashboard or using Vercel CLI:
 NEXTAUTH_URL=https://your-domain.vercel.app
 NEXTAUTH_SECRET=your-64-character-secret-key
 DATABASE_URL=postgresql://user:pass@host:port/db
+EMAIL_PROVIDER=brevo                 # or "ses" for Amazon SES
+BREVO_API_KEY=xkeysib-...
+BREVO_WEBHOOK_SECRET=long-random-string
+# Only for EMAIL_PROVIDER=ses:
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=AKIA...
 AWS_SECRET_ACCESS_KEY=...
@@ -40,7 +44,11 @@ ADMIN_PASSWORD=secure-password
 
 # Optional Variables
 DO_API_TOKEN=dop_v1_...
-WEBHOOK_URL=https://your-domain.vercel.app/api/webhooks/ses
+BREVO_SMTP_LOGIN=...                 # shared SMTP login shown in the dashboard
+BREVO_SMTP_KEY=...
+# Webhooks: Brevo is registered automatically at
+#   $NEXTAUTH_URL/api/webhooks/brevo?token=$BREVO_WEBHOOK_SECRET
+# SES uses an SNS subscription to $NEXTAUTH_URL/api/webhooks/ses
 ```
 
 ### 3. Deploy to Vercel

@@ -46,3 +46,4 @@ next-env.d.ts
 docs/marketing/*
 k8s/secret.yaml
 *.secret.yaml
+.env*.local
