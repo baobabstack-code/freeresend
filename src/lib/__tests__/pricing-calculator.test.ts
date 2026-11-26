@@ -371,7 +371,7 @@ describe('HOSTED_PRICING_TIERS', () => {
     expect(hosted.recommended).toBe(true);
     expect(hosted.features).toContain('First 3,000 emails free');
     expect(hosted.features).toContain('$15/month flat fee after 3,000 emails');
-    expect(hosted.features).toContain('Use your own SES keys');
+    expect(hosted.features).toContain('Use your own Brevo or Amazon SES account');
   });
 });
 

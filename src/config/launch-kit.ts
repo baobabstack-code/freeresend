@@ -1,7 +1,10 @@
+import { site } from "./site";
+
 export const launchKit = {
-  name: "FreeResend Self-Hosted Launch Kit",
+  name: `${site.name} Launch Kit`,
   price: "$12",
   productUrl: "/launch-kit",
+  canonicalUrl: `${site.url}/launch-kit`,
   downloadUrl: "/launch-kit/download?purchase=success",
   checkoutUrl: "https://buy.stripe.com/4gMeVc3bdaJ20y7crTaMU00",
   stripePaymentLinkId: "plink_1Tc62wD3ywlDS5H4VdsU3VtA",
@@ -16,9 +19,10 @@ export const launchKit = {
 } as const;
 
 export const deploymentReview = {
-  name: "FreeResend Deployment Review",
+  name: `${site.name} Deployment Review`,
   price: "$12",
   productUrl: "/deployment-review",
+  canonicalUrl: `${site.url}/deployment-review`,
   thanksUrl: "/deployment-review/thanks",
   checkoutUrl: "https://buy.stripe.com/3cIcN49zBcRagx5dvXaMU01",
   stripePaymentLinkId: "plink_1Tc62yD3ywlDS5H4ThYUyf51",
@@ -35,11 +39,11 @@ export const deploymentReview = {
 export const sesProductionGuide = {
   name: "SES Production Readiness Guide",
   productUrl: "/guides/ses-production-readiness",
-  canonicalUrl: "https://www.freeresend.com/guides/ses-production-readiness",
+  canonicalUrl: `${site.url}/guides/ses-production-readiness`,
 } as const;
 
 export const sesRequestHelper = {
   name: "SES Production Request Helper",
   productUrl: "/tools/ses-production-request-helper",
-  canonicalUrl: "https://www.freeresend.com/tools/ses-production-request-helper",
+  canonicalUrl: `${site.url}/tools/ses-production-request-helper`,
 } as const;

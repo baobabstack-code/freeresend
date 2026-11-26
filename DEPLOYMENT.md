@@ -32,6 +32,10 @@ Set these in Vercel Dashboard or using Vercel CLI:
 NEXTAUTH_URL=https://your-domain.vercel.app
 NEXTAUTH_SECRET=your-64-character-secret-key
 DATABASE_URL=postgresql://user:pass@host:port/db
+EMAIL_PROVIDER=brevo                 # or "ses" for Amazon SES
+BREVO_API_KEY=xkeysib-...
+BREVO_WEBHOOK_SECRET=long-random-string
+# Only for EMAIL_PROVIDER=ses:
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=AKIA...
 AWS_SECRET_ACCESS_KEY=...
@@ -40,7 +44,11 @@ ADMIN_PASSWORD=secure-password
 
 # Optional Variables
 DO_API_TOKEN=dop_v1_...
-WEBHOOK_URL=https://your-domain.vercel.app/api/webhooks/ses
+BREVO_SMTP_LOGIN=...                 # shared SMTP login shown in the dashboard
+BREVO_SMTP_KEY=...
+# Webhooks: Brevo is registered automatically at
+#   $NEXTAUTH_URL/api/webhooks/brevo?token=$BREVO_WEBHOOK_SECRET
+# SES uses an SNS subscription to $NEXTAUTH_URL/api/webhooks/ses
 ```
 
 ### 3. Deploy to Vercel
@@ -67,7 +75,7 @@ vercel env add DATABASE_URL
 ```
 
 #### Option C: One-Click Deploy
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Feibrahim%2Ffreeresend)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbaobabstack-code%2Ffreeresend)
 
 ### 4. Domain Configuration
 
@@ -185,7 +193,7 @@ vercel --prod
 
 - **Documentation**: Check README.md and SETUP.md
 - **Launch Kit**: Optional deployment checklist at [freeresend.com/launch-kit](https://www.freeresend.com/launch-kit)
-- **Issues**: [GitHub Issues](https://github.com/eibrahim/freeresend/issues)
+- **Issues**: [GitHub Issues](https://github.com/baobabstack-code/freeresend/issues)
 - **Professional Support**: [EliteCoders](https://elitecoders.co/)
 
 ---

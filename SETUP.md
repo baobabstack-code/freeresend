@@ -82,7 +82,16 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-key
 
-# AWS
+# Email provider: "ses" (Amazon SES, default) or "brevo" (free tier, no card needed)
+EMAIL_PROVIDER=brevo
+
+# Brevo (when EMAIL_PROVIDER=brevo)
+BREVO_API_KEY=xkeysib-...            # Brevo > SMTP & API > API keys
+BREVO_WEBHOOK_SECRET=long-random-string  # protects /api/webhooks/brevo
+BREVO_SMTP_LOGIN=...                 # optional: shown as the shared SMTP login
+BREVO_SMTP_KEY=...                   # optional: Brevo > SMTP & API > SMTP keys
+
+# Amazon SES (when EMAIL_PROVIDER=ses)
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=your-access-key
 AWS_SECRET_ACCESS_KEY=your-secret-key

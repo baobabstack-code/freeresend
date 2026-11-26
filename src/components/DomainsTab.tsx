@@ -1,484 +1,546 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  Badge,
+  Body1,
+  Button,
+  Caption1,
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogSurface,
+  DialogTitle,
+  Field,
+  Input,
+  makeStyles,
+  Menu,
+  MenuDivider,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  Spinner,
+  Subtitle2,
+  Table,
+  TableBody,
+  TableCell,
+  TableCellLayout,
+  TableHeader,
+  TableHeaderCell,
+  TableRow,
+  Text,
+  tokens,
+} from "@fluentui/react-components";
+import {
+  Add20Regular,
+  ArrowSync20Regular,
+  CheckmarkCircle20Regular,
+  Delete20Regular,
+  Globe20Regular,
+  Mail20Regular,
+  MoreHorizontal20Regular,
+  TextBulletListSquare20Regular,
+} from "@fluentui/react-icons";
 import { api } from "@/lib/api";
+import { PageHeader, PanelCard } from "./ui/Layout";
+import StatusBadge from "./ui/StatusBadge";
+import CopyField from "./ui/CopyField";
+import ConfirmDialog from "./ui/ConfirmDialog";
+import { errorMessage, useNotify } from "./ui/toast";
+
+export interface ProviderInfo {
+  name: "ses" | "brevo";
+  label: string;
+  smtpMode: "per-domain" | "shared";
+}
+
+interface DnsRecord {
+  type: string;
+  name: string;
+  value: string;
+  ttl?: number;
+  description?: string;
+}
+
+interface SmtpCredentials {
+  username: string;
+  password: string;
+  server: string;
+  port: number;
+  shared?: boolean;
+}
 
 interface Domain {
   id: string;
   domain: string;
   status: "pending" | "verified" | "failed";
-  dns_records: Array<{
-    type: string;
-    name: string;
-    value: string;
-    ttl?: number;
-    description?: string;
-  }>;
-  smtp_credentials?: {
-    username: string;
-    password: string;
-    server: string;
-    port: number;
-  };
+  provider?: string;
+  dns_records: DnsRecord[];
+  smtp_credentials?: SmtpCredentials;
   created_at: string;
 }
 
-export default function DomainsTab() {
+const useStyles = makeStyles({
+  addForm: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "flex-end",
+    gap: "12px",
+  },
+  addField: { flex: "1 1 280px" },
+  tableCard: { padding: 0, overflow: "hidden" },
+  tableWrap: { overflowX: "auto" },
+  table: { minWidth: "640px" },
+  domainName: { fontWeight: tokens.fontWeightSemibold },
+  muted: { color: tokens.colorNeutralForeground3 },
+  actionsCell: { display: "flex", justifyContent: "flex-end", gap: "4px" },
+  empty: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    textAlign: "center",
+    gap: "8px",
+    padding: "48px 16px",
+    color: tokens.colorNeutralForeground3,
+  },
+  emptyIcon: { fontSize: "40px", color: tokens.colorBrandForeground1 },
+  stack: { display: "flex", flexDirection: "column", gap: "16px", marginTop: "16px" },
+  record: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+    padding: "14px",
+    borderRadius: tokens.borderRadiusLarge,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    backgroundColor: tokens.colorNeutralBackground2,
+  },
+  recordHead: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" },
+  dialogSurface: { maxWidth: "720px", width: "calc(100vw - 32px)" },
+  grid2: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: "12px",
+    "@media (min-width: 560px)": { gridTemplateColumns: "1fr 1fr" },
+  },
+  loading: { padding: "48px" },
+});
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export default function DomainsTab({ provider }: { provider?: ProviderInfo | null }) {
+  const s = useStyles();
+  const notify = useNotify();
+
   const [domains, setDomains] = useState<Domain[]>([]);
   const [loading, setLoading] = useState(true);
-  const [addingDomain, setAddingDomain] = useState(false);
   const [newDomain, setNewDomain] = useState("");
-  const [showDNSModal, setShowDNSModal] = useState<Domain | null>(null);
-  const [syncingToDO, setSyncingToDO] = useState(false);
-  const [showSmtpModal, setShowSmtpModal] = useState<Domain | null>(null);
-  const [generatingSmtp, setGeneratingSmtp] = useState(false);
-  const [deletingSmtp, setDeletingSmtp] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadDomains();
-  }, []);
+  const [dnsDomain, setDnsDomain] = useState<Domain | null>(null);
+  const [smtp, setSmtp] = useState<{ domain: Domain; credentials: SmtpCredentials } | null>(null);
+  const [toDelete, setToDelete] = useState<Domain | null>(null);
+  const [smtpToDelete, setSmtpToDelete] = useState<Domain | null>(null);
 
-  const loadDomains = async () => {
+  const providerLabel = provider?.label ?? "your email provider";
+
+  const load = useCallback(async () => {
     try {
       const response = await api.getDomains();
       setDomains(response.data.domains);
     } catch (error) {
-      console.error("Failed to load domains:", error);
+      notify.error("Couldn't load domains", errorMessage(error));
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const replaceDomain = (updated: Partial<Domain> & { id: string }) => {
+    setDomains((list) => list.map((d) => (d.id === updated.id ? { ...d, ...updated } : d)));
+    setDnsDomain((d) => (d && d.id === updated.id ? { ...d, ...updated } : d));
   };
 
-  const handleAddDomain = async (e: React.FormEvent) => {
+  const addDomain = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDomain.trim()) return;
-
-    setAddingDomain(true);
+    const value = newDomain.trim().toLowerCase();
+    if (!value) return;
+    setAdding(true);
     try {
-      const response = await api.addDomain(newDomain.trim());
-      setDomains([response.data.domain, ...domains]);
+      const response = await api.addDomain(value);
+      const domain: Domain = response.data.domain;
+      setDomains((list) => [domain, ...list.filter((d) => d.id !== domain.id)]);
       setNewDomain("");
-      setShowDNSModal(response.data.domain);
-    } catch (error: unknown) {
-      const errorObj = error as { message?: string };
-      alert(errorObj.message || "Failed to add domain");
+      setDnsDomain(domain);
+      notify.success("Domain added", "Add the DNS records below, then click Verify.");
+    } catch (error) {
+      notify.error("Couldn't add domain", errorMessage(error));
     } finally {
-      setAddingDomain(false);
+      setAdding(false);
     }
   };
 
-  const handleVerifyDomain = async (domainId: string) => {
+  const verify = async (domain: Domain) => {
+    setBusyId(domain.id);
     try {
-      const response = await api.verifyDomain(domainId);
-      await loadDomains(); // Refresh domains list
-      alert(response.message);
-    } catch (error: unknown) {
-      const errorObj = error as { message?: string };
-      alert(errorObj.message || "Failed to verify domain");
+      const response = await api.verifyDomain(domain.id);
+      replaceDomain({ id: domain.id, status: response.data.status });
+      if (response.data.verified) notify.success("Domain verified", `${domain.domain} is ready to send.`);
+      else notify.info("Not verified yet", "DNS changes can take up to an hour to show up. Try again shortly.");
+    } catch (error) {
+      notify.error("Verification failed", errorMessage(error));
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const handleDeleteDomain = async (domainId: string) => {
-    if (!confirm("Are you sure you want to delete this domain?")) return;
-
+  const refreshDns = async (domain: Domain) => {
+    setBusyId(domain.id);
     try {
-      await api.deleteDomain(domainId);
-      setDomains(domains.filter((d) => d.id !== domainId));
-    } catch (error: unknown) {
-      const errorObj = error as { message?: string };
-      alert(errorObj.message || "Failed to delete domain");
+      const response = await api.retryDigitalOceanDNS(domain.id);
+      if (response.data?.dnsRecords) replaceDomain({ id: domain.id, dns_records: response.data.dnsRecords });
+      notify.success("DNS records synced", response.message);
+    } catch (error) {
+      // Records are still refreshed even when DigitalOcean isn't used.
+      await load();
+      notify.warning("Records refreshed", errorMessage(error));
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const handleSyncToDigitalOcean = async (domainId: string) => {
-    if (
-      !confirm(
-        "This will create DNS records in your DigitalOcean account. Continue?"
-      )
-    )
+  const remove = async () => {
+    if (!toDelete) return;
+    setBusyId(toDelete.id);
+    try {
+      await api.deleteDomain(toDelete.id);
+      setDomains((list) => list.filter((d) => d.id !== toDelete.id));
+      notify.success("Domain deleted", `${toDelete.domain} and its API keys were removed.`);
+      setToDelete(null);
+    } catch (error) {
+      notify.error("Couldn't delete domain", errorMessage(error));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const openSmtp = async (domain: Domain) => {
+    if (domain.smtp_credentials) {
+      setSmtp({ domain, credentials: domain.smtp_credentials });
       return;
-
-    setSyncingToDO(true);
+    }
+    setBusyId(domain.id);
     try {
-      const response = await api.retryDigitalOceanDNS(domainId);
-      alert(`Success: ${response.message}`);
-      // Optionally refresh domains to show updated status
-      await loadDomains();
-    } catch (error: unknown) {
-      const errorObj = error as { message?: string };
-      alert(
-        `Failed to sync to DigitalOcean: ${errorObj.message || "Unknown error"}`
-      );
+      const response = await api.createSmtpCredentials(domain.id);
+      const credentials: SmtpCredentials = response.credentials;
+      if (!credentials.shared) replaceDomain({ id: domain.id, smtp_credentials: credentials });
+      setSmtp({ domain, credentials });
+    } catch (error) {
+      notify.error("SMTP unavailable", errorMessage(error));
     } finally {
-      setSyncingToDO(false);
+      setBusyId(null);
     }
   };
 
-  const handleGenerateSmtp = async (domainId: string) => {
-    setGeneratingSmtp(true);
+  const deleteSmtp = async () => {
+    if (!smtpToDelete) return;
+    setBusyId(smtpToDelete.id);
     try {
-      const token = localStorage.getItem("auth_token");
-      const response = await fetch(`/api/domains/${domainId}/smtp`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to generate SMTP credentials");
-      }
-
-      await loadDomains();
-      const updatedDomain = domains.find((d) => d.id === domainId);
-      if (updatedDomain) {
-        setShowSmtpModal({ ...updatedDomain, smtp_credentials: data.credentials });
-      }
-      alert("SMTP credentials generated successfully!");
-    } catch (error: unknown) {
-      const errorObj = error as { message?: string };
-      alert(errorObj.message || "Failed to generate SMTP credentials");
+      await api.deleteSmtpCredentials(smtpToDelete.id);
+      replaceDomain({ id: smtpToDelete.id, smtp_credentials: undefined });
+      setSmtp(null);
+      setSmtpToDelete(null);
+      notify.success("SMTP credentials deleted");
+    } catch (error) {
+      notify.error("Couldn't delete SMTP credentials", errorMessage(error));
     } finally {
-      setGeneratingSmtp(false);
+      setBusyId(null);
     }
   };
-
-  const handleDeleteSmtp = async (domainId: string) => {
-    if (!confirm("Are you sure you want to delete these SMTP credentials? This will remove the IAM user from AWS.")) return;
-
-    setDeletingSmtp(true);
-    try {
-      const token = localStorage.getItem("auth_token");
-      const response = await fetch(`/api/domains/${domainId}/smtp`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to delete SMTP credentials");
-      }
-
-      await loadDomains();
-      setShowSmtpModal(null);
-      alert("SMTP credentials deleted successfully!");
-    } catch (error: unknown) {
-      const errorObj = error as { message?: string };
-      alert(errorObj.message || "Failed to delete SMTP credentials");
-    } finally {
-      setDeletingSmtp(false);
-    }
-  };
-
-  const getStatusBadge = (status: Domain["status"]) => {
-    const colors = {
-      pending: "bg-yellow-100 text-yellow-800",
-      verified: "bg-green-100 text-green-800",
-      failed: "bg-red-100 text-red-800",
-    };
-
-    return (
-      <span
-        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colors[status]}`}
-      >
-        {status}
-      </span>
-    );
-  };
-
-  if (loading) {
-    return <div className="text-center py-8">Loading domains...</div>;
-  }
 
   return (
-    <div className="space-y-6">
-      <div className="sm:flex sm:items-center">
-        <div className="sm:flex-auto">
-          <h1 className="text-xl font-semibold text-gray-900">Domains</h1>
-          <p className="mt-2 text-sm text-gray-700">
-            Add and manage your email domains. Domains must be verified before
-            you can send emails.
-          </p>
-        </div>
-      </div>
+    <>
+      <PageHeader
+        title="Domains"
+        description={`Add the domains you send from. ${provider ? `${provider.label} signs your email` : "Your provider signs your email"} once the DNS records are in place.`}
+      />
 
-      {/* Add Domain Form */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">
-            Add New Domain
-          </h3>
-          <div className="mt-2 max-w-xl text-sm text-gray-500">
-            <p>Enter a domain you want to use for sending emails.</p>
-          </div>
-          <form
-            onSubmit={handleAddDomain}
-            className="mt-5 sm:flex sm:items-center"
+      <PanelCard>
+        <form className={s.addForm} onSubmit={addDomain}>
+          <Field label="Domain name" className={s.addField} hint="For example mail.yourcompany.co.zw">
+            <Input
+              value={newDomain}
+              onChange={(_, d) => setNewDomain(d.value)}
+              placeholder="example.com"
+              contentBefore={<Globe20Regular />}
+              disabled={adding}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+          <Button
+            type="submit"
+            appearance="primary"
+            icon={adding ? <Spinner size="tiny" /> : <Add20Regular />}
+            disabled={adding || !newDomain.trim()}
           >
-            <div className="w-full sm:max-w-xs">
-              <input
-                type="text"
-                placeholder="example.com"
-                value={newDomain}
-                onChange={(e) => setNewDomain(e.target.value)}
-                className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                disabled={addingDomain}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={addingDomain || !newDomain.trim()}
-              className="mt-3 w-full inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {addingDomain ? "Adding..." : "Add Domain"}
-            </button>
-          </form>
-        </div>
-      </div>
+            {adding ? "Adding…" : "Add domain"}
+          </Button>
+        </form>
+      </PanelCard>
 
-      {/* Domains List */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
-        {domains.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            No domains added yet. Add your first domain to get started.
+      <div style={{ height: 16 }} />
+
+      <PanelCard className={s.tableCard}>
+        {loading ? (
+          <Spinner className={s.loading} label="Loading domains…" />
+        ) : domains.length === 0 ? (
+          <div className={s.empty}>
+            <Globe20Regular className={s.emptyIcon} />
+            <Subtitle2>No domains yet</Subtitle2>
+            <Body1>Add your first domain above to start sending email.</Body1>
           </div>
         ) : (
-          <ul className="divide-y divide-gray-200">
-            {domains.map((domain) => (
-              <li key={domain.id}>
-                <div className="px-4 py-4 sm:px-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0">
-                        {getStatusBadge(domain.status)}
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {domain.domain}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          Added{" "}
-                          {new Date(domain.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {domain.status === "pending" && (
-                        <>
-                          <button
-                            onClick={() => setShowDNSModal(domain)}
-                            className="text-blue-600 hover:text-blue-900 text-sm font-medium"
-                          >
-                            View DNS Records
-                          </button>
-                          <button
-                            onClick={() => handleVerifyDomain(domain.id)}
-                            className="text-green-600 hover:text-green-900 text-sm font-medium"
-                          >
-                            Check Verification
-                          </button>
-                        </>
-                      )}
-                      {domain.status === "verified" && (
-                        <>
-                          {domain.smtp_credentials ? (
-                            <button
-                              onClick={() => setShowSmtpModal(domain)}
-                              className="text-purple-600 hover:text-purple-900 text-sm font-medium"
+          <div className={s.tableWrap}>
+            <Table className={s.table} aria-label="Domains">
+              <TableHeader>
+                <TableRow>
+                  <TableHeaderCell>Domain</TableHeaderCell>
+                  <TableHeaderCell>Status</TableHeaderCell>
+                  <TableHeaderCell>Added</TableHeaderCell>
+                  <TableHeaderCell aria-label="Actions" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {domains.map((domain) => {
+                  const busy = busyId === domain.id;
+                  return (
+                    <TableRow key={domain.id}>
+                      <TableCell>
+                        <TableCellLayout
+                          media={<Globe20Regular />}
+                          description={
+                            domain.provider && provider && domain.provider !== provider.name
+                              ? `Set up with ${domain.provider === "brevo" ? "Brevo" : "Amazon SES"}`
+                              : undefined
+                          }
+                        >
+                          <span className={s.domainName}>{domain.domain}</span>
+                        </TableCellLayout>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={domain.status} />
+                      </TableCell>
+                      <TableCell>
+                        <Text className={s.muted}>{formatDate(domain.created_at)}</Text>
+                      </TableCell>
+                      <TableCell>
+                        <div className={s.actionsCell}>
+                          {busy ? <Spinner size="tiny" /> : null}
+                          {domain.status !== "verified" ? (
+                            <Button
+                              size="small"
+                              appearance="primary"
+                              icon={<CheckmarkCircle20Regular />}
+                              onClick={() => verify(domain)}
+                              disabled={busy}
                             >
-                              View SMTP
-                            </button>
+                              Verify
+                            </Button>
                           ) : (
-                            <button
-                              onClick={() => handleGenerateSmtp(domain.id)}
-                              disabled={generatingSmtp}
-                              className="text-purple-600 hover:text-purple-900 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            <Button
+                              size="small"
+                              icon={<Mail20Regular />}
+                              onClick={() => openSmtp(domain)}
+                              disabled={busy}
                             >
-                              {generatingSmtp ? "Generating..." : "Generate SMTP"}
-                            </button>
+                              SMTP
+                            </Button>
                           )}
-                        </>
-                      )}
-                      <button
-                        onClick={() => handleDeleteDomain(domain.id)}
-                        className="text-red-600 hover:text-red-900 text-sm font-medium"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                          <Menu positioning="below-end">
+                            <MenuTrigger disableButtonEnhancement>
+                              <Button
+                                size="small"
+                                appearance="subtle"
+                                icon={<MoreHorizontal20Regular />}
+                                aria-label={`More actions for ${domain.domain}`}
+                                disabled={busy}
+                              />
+                            </MenuTrigger>
+                            <MenuPopover>
+                              <MenuList>
+                                <MenuItem icon={<TextBulletListSquare20Regular />} onClick={() => setDnsDomain(domain)}>
+                                  DNS records
+                                </MenuItem>
+                                <MenuItem icon={<ArrowSync20Regular />} onClick={() => refreshDns(domain)}>
+                                  Refresh records / sync to DigitalOcean
+                                </MenuItem>
+                                {domain.status === "verified" ? (
+                                  <MenuItem icon={<CheckmarkCircle20Regular />} onClick={() => verify(domain)}>
+                                    Re-check verification
+                                  </MenuItem>
+                                ) : null}
+                                <MenuDivider />
+                                <MenuItem icon={<Delete20Regular />} onClick={() => setToDelete(domain)}>
+                                  Delete domain
+                                </MenuItem>
+                              </MenuList>
+                            </MenuPopover>
+                          </Menu>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         )}
-      </div>
+      </PanelCard>
 
-      {/* DNS Records Modal */}
-      {showDNSModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                DNS Records for {showDNSModal.domain}
-              </h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Add these DNS records to your domain provider to verify
-                ownership and enable email sending:
-              </p>
-
-              <div className="space-y-4">
-                {showDNSModal.dns_records?.map(
-                  (
-                    record: {
-                      type: string;
-                      name: string;
-                      value: string;
-                      ttl?: number;
-                      description?: string;
-                    },
-                    index: number
-                  ) => (
-                    <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                      <div className="grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <span className="font-medium text-gray-700">
-                            Type:
-                          </span>
-                          <div className="mt-1">{record.type}</div>
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-700">
-                            Name:
-                          </span>
-                          <div className="mt-1 break-all">{record.name}</div>
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-700">
-                            Value:
-                          </span>
-                          <div className="mt-1 break-all font-mono text-xs bg-white p-2 rounded border">
-                            {record.value}
-                          </div>
-                        </div>
+      {/* DNS records */}
+      <Dialog open={!!dnsDomain} onOpenChange={(_, d) => !d.open && setDnsDomain(null)}>
+        <DialogSurface className={s.dialogSurface}>
+          <DialogBody>
+            <DialogTitle>DNS records for {dnsDomain?.domain}</DialogTitle>
+            <DialogContent>
+              <MessageBar intent="info">
+                <MessageBarBody>
+                  Add these records at your DNS host (for example Cloudflare, DigitalOcean or your registrar).
+                  Changes usually appear within minutes but can take up to an hour.
+                </MessageBarBody>
+              </MessageBar>
+              <div className={s.stack}>
+                {(dnsDomain?.dns_records ?? []).length === 0 ? (
+                  <Body1 className={s.muted}>
+                    No records stored yet. Use “Refresh records” to fetch them from {providerLabel}.
+                  </Body1>
+                ) : (
+                  dnsDomain?.dns_records.map((r, i) => (
+                    <div key={`${r.type}-${r.name}-${i}`} className={s.record}>
+                      <div className={s.recordHead}>
+                        <Badge appearance="filled" color="brand" shape="rounded">
+                          {r.type}
+                        </Badge>
+                        {r.description ? <Caption1 className={s.muted}>{r.description}</Caption1> : null}
                       </div>
-                      {record.description && (
-                        <div className="mt-2 text-xs text-gray-500">
-                          {record.description}
-                        </div>
-                      )}
+                      <CopyField label="Name / host" value={r.name} />
+                      <CopyField label="Value" value={r.value} />
                     </div>
-                  )
+                  ))
                 )}
               </div>
-
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  onClick={() => setShowDNSModal(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setDnsDomain(null)}>
+                Close
+              </Button>
+              <Button
+                icon={<ArrowSync20Regular />}
+                onClick={() => dnsDomain && refreshDns(dnsDomain)}
+                disabled={!!busyId}
+              >
+                Refresh records
+              </Button>
+              {dnsDomain?.status !== "verified" ? (
+                <Button
+                  appearance="primary"
+                  icon={busyId ? <Spinner size="tiny" /> : <CheckmarkCircle20Regular />}
+                  onClick={() => dnsDomain && verify(dnsDomain)}
+                  disabled={!!busyId}
                 >
-                  Close
-                </button>
-                <button
-                  onClick={() => handleSyncToDigitalOcean(showDNSModal.id)}
-                  disabled={syncingToDO}
-                  className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md"
-                >
-                  {syncingToDO ? "Syncing..." : "Sync to DigitalOcean"}
-                </button>
-                <button
-                  onClick={() => {
-                    handleVerifyDomain(showDNSModal.id);
-                    setShowDNSModal(null);
-                  }}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
-                >
-                  Check Verification
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+                  Verify
+                </Button>
+              ) : null}
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
 
-      {/* SMTP Credentials Modal */}
-      {showSmtpModal && showSmtpModal.smtp_credentials && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                SMTP Credentials for {showSmtpModal.domain}
-              </h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Use these credentials to send emails via SMTP:
-              </p>
-
-              <div className="space-y-4">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="font-medium text-gray-700">Server:</span>
-                      <div className="mt-1 font-mono text-xs bg-white p-2 rounded border">
-                        {showSmtpModal.smtp_credentials.server}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="font-medium text-gray-700">Port:</span>
-                      <div className="mt-1 font-mono text-xs bg-white p-2 rounded border">
-                        {showSmtpModal.smtp_credentials.port}
-                      </div>
-                    </div>
-                  </div>
+      {/* SMTP credentials */}
+      <Dialog open={!!smtp} onOpenChange={(_, d) => !d.open && setSmtp(null)}>
+        <DialogSurface className={s.dialogSurface}>
+          <DialogBody>
+            <DialogTitle>SMTP credentials · {smtp?.domain.domain}</DialogTitle>
+            <DialogContent>
+              {smtp?.credentials.shared ? (
+                <MessageBar intent="info">
+                  <MessageBarBody>
+                    <MessageBarTitle>Shared account login</MessageBarTitle>
+                    {providerLabel} uses one SMTP login for your whole account, so every domain shares it.
+                    You can only send from domains that are verified.
+                  </MessageBarBody>
+                </MessageBar>
+              ) : (
+                <MessageBar intent="warning">
+                  <MessageBarBody>
+                    <MessageBarTitle>Keep these secret</MessageBarTitle>
+                    Anyone with this password can send email as {smtp?.domain.domain}.
+                  </MessageBarBody>
+                </MessageBar>
+              )}
+              <div className={s.stack}>
+                <div className={s.grid2}>
+                  <CopyField label="Server" value={smtp?.credentials.server ?? ""} />
+                  <CopyField label="Port (STARTTLS)" value={String(smtp?.credentials.port ?? "")} />
                 </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="space-y-4">
-                    <div>
-                      <span className="font-medium text-gray-700">Username:</span>
-                      <div className="mt-1 font-mono text-xs bg-white p-2 rounded border break-all">
-                        {showSmtpModal.smtp_credentials.username}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="font-medium text-gray-700">Password:</span>
-                      <div className="mt-1 font-mono text-xs bg-white p-2 rounded border break-all">
-                        {showSmtpModal.smtp_credentials.password}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
-                  <p className="text-xs text-yellow-800">
-                    <strong>⚠️ Important:</strong> Store these credentials securely. The password cannot be retrieved again once you close this dialog.
-                  </p>
-                </div>
+                <CopyField label="Username" value={smtp?.credentials.username ?? ""} />
+                <CopyField label="Password" value={smtp?.credentials.password ?? ""} mask />
               </div>
+            </DialogContent>
+            <DialogActions>
+              {!smtp?.credentials.shared && provider?.smtpMode !== "shared" ? (
+                <Button
+                  appearance="subtle"
+                  icon={<Delete20Regular />}
+                  onClick={() => smtp && setSmtpToDelete(smtp.domain)}
+                >
+                  Delete credentials
+                </Button>
+              ) : null}
+              <Button appearance="primary" onClick={() => setSmtp(null)}>
+                Done
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
 
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  onClick={() => handleDeleteSmtp(showSmtpModal.id)}
-                  disabled={deletingSmtp}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md"
-                >
-                  {deletingSmtp ? "Deleting..." : "Delete Credentials"}
-                </button>
-                <button
-                  onClick={() => setShowSmtpModal(null)}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      <ConfirmDialog
+        open={!!toDelete}
+        title={`Delete ${toDelete?.domain}?`}
+        busy={!!toDelete && busyId === toDelete.id}
+        onCancel={() => setToDelete(null)}
+        onConfirm={remove}
+      >
+        This removes the domain and every API key for it. Apps using those keys will stop sending. This can’t be
+        undone.
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={!!smtpToDelete}
+        title="Delete SMTP credentials?"
+        busy={!!smtpToDelete && busyId === smtpToDelete.id}
+        onCancel={() => setSmtpToDelete(null)}
+        onConfirm={deleteSmtp}
+      >
+        Apps using this SMTP login will stop sending, and the login is removed from {providerLabel}.
+      </ConfirmDialog>
+    </>
   );
 }

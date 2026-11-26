@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyJWT } from "@/lib/auth";
-import { getDomainById } from "@/lib/domains";
 import {
-  setupDomainDNS,
-  verifyDomainOwnership,
-  type DODomainRecord,
-} from "@/lib/digitalocean";
-import { generateDNSRecords, getDomainDkimTokens } from "@/lib/ses";
+  getDomainById,
+  refreshDomainDnsRecords,
+  syncDnsToDigitalOcean,
+} from "@/lib/domains";
+import { verifyDomainOwnership } from "@/lib/digitalocean";
 
 function cors(response: NextResponse) {
   response.headers.set("Access-Control-Allow-Origin", "*");
@@ -21,32 +20,20 @@ function cors(response: NextResponse) {
   return response;
 }
 
-// Helper function to convert DODomainRecord to DNSRecord
-function convertDORecordToDNSRecord(doRecord: DODomainRecord): {
-  type: string;
-  name: string;
-  value: string;
-  ttl: number;
-} {
-  return {
-    type: doRecord.type,
-    name: doRecord.name,
-    value: doRecord.data,
-    ttl: doRecord.ttl,
-  };
-}
-
+/**
+ * Refresh a domain's DNS records from the email provider, store them,
+ * and push them to DigitalOcean when the domain is hosted there.
+ * POST /api/domains/:id/retry-dns
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // Handle CORS preflight
   if (request.method === "OPTIONS") {
     return cors(new NextResponse(null, { status: 200 }));
   }
 
   try {
-    // Check authorization
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return cors(
@@ -57,20 +44,15 @@ export async function POST(
       );
     }
 
-    const token = authHeader.substring(7);
-    const user = verifyJWT(token);
+    const user = verifyJWT(authHeader.substring(7));
     if (!user) {
       return cors(
-        NextResponse.json(
-          { error: "Invalid or expired token" },
-          { status: 401 }
-        )
+        NextResponse.json({ error: "Invalid or expired token" }, { status: 401 })
       );
     }
 
     const { id } = await params;
     const domain = await getDomainById(id);
-
     if (!domain || domain.user_id !== user.id) {
       return cors(
         NextResponse.json({ error: "Domain not found" }, { status: 404 })
@@ -80,72 +62,46 @@ export async function POST(
     const domainName = domain.domain;
 
     try {
-      // Get DKIM tokens
-      let dkimTokens: string[] = [];
-      try {
-        dkimTokens = await getDomainDkimTokens(domainName);
-        console.log(`Found ${dkimTokens.length} DKIM tokens for ${domainName}`);
-      } catch (error) {
-        console.log(`No DKIM tokens found for ${domainName}:`, error);
-      }
+      const dnsRecords = await refreshDomainDnsRecords(domain);
 
-      // Generate DNS records
-      const dnsRecords = generateDNSRecords(
-        domainName,
-        domain.verification_token || "",
-        dkimTokens
-      );
-
-      // Check if domain exists in Digital Ocean
-      console.log(`Checking if ${domainName} exists in DigitalOcean...`);
-      const isDomainInDO = await verifyDomainOwnership(domainName);
-      if (!isDomainInDO) {
+      if (!(await verifyDomainOwnership(domainName))) {
         return cors(
           NextResponse.json(
             {
               success: false,
               error: `Domain ${domainName} not found in your DigitalOcean account. Please add it first.`,
+              data: { domain: domainName, dnsRecords },
             },
             { status: 400 }
           )
         );
       }
 
-      // Setup DNS in Digital Ocean
-      console.log(`Setting up DigitalOcean DNS for ${domainName}...`);
-      const doRecords = await setupDomainDNS(domainName, dnsRecords);
-      const digitalOceanRecords = doRecords.map(convertDORecordToDNSRecord);
-
-      console.log(
-        `Successfully created ${doRecords.length} DNS records for ${domainName}`
-      );
+      const dns = await syncDnsToDigitalOcean(domainName, dnsRecords);
 
       return cors(
         NextResponse.json({
           success: true,
           data: {
             domain: domainName,
-            createdRecords: digitalOceanRecords,
-            setupInstructions:
-              "DNS records have been successfully created/updated in DigitalOcean.",
+            dnsRecords,
+            createdRecords: dns.records,
+            setupInstructions: dns.instructions,
           },
-          message: `DNS setup completed successfully for ${domainName}. Created ${doRecords.length} records.`,
+          message: `DNS setup completed for ${domainName}. Synced ${dns.records.length} records.`,
         })
       );
     } catch (error: unknown) {
       console.error(`DNS retry failed for ${domainName}:`, error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-
       return cors(
         NextResponse.json(
           {
             success: false,
-            error: `Failed to setup DigitalOcean DNS: ${errorMessage}`,
-            suggestion:
-              "Please check your DigitalOcean API token permissions and try again.",
+            error: `Failed to refresh DNS records: ${errorMessage}`,
           },
-          { status: 500 }
+          { status: errorMessage.includes("was set up with") ? 409 : 500 }
         )
       );
     }

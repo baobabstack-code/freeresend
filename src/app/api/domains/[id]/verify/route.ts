@@ -59,6 +59,10 @@ export async function POST(
     }));
   } catch (error) {
     console.error("API Error:", error);
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("was set up with")) {
+      return cors(NextResponse.json({ error: message }, { status: 409 }));
+    }
     return cors(NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

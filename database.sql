@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS domains (
   do_domain_id VARCHAR(255),
   dns_records JSONB DEFAULT '[]',
   verification_token VARCHAR(255),
-  smtp_credentials JSONB, -- Stores encrypted SMTP username/password
+  smtp_credentials JSONB, -- Stores SMTP username/password (SES per-domain IAM user)
+  provider VARCHAR(20) NOT NULL DEFAULT 'ses', -- ses | brevo
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -57,6 +58,7 @@ CREATE TABLE IF NOT EXISTS email_logs (
   attachments JSONB DEFAULT '[]',
   status VARCHAR(50) DEFAULT 'pending', -- pending, sent, failed, delivered, bounced, complained
   ses_message_id VARCHAR(255),
+  provider VARCHAR(20) NOT NULL DEFAULT 'ses', -- ses | brevo
   error_message TEXT,
   webhook_data JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -98,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
 CREATE INDEX IF NOT EXISTS idx_email_logs_api_key_id ON email_logs(api_key_id);
 CREATE INDEX IF NOT EXISTS idx_email_logs_domain_id ON email_logs(domain_id);
 CREATE INDEX IF NOT EXISTS idx_email_logs_message_id ON email_logs(message_id);
+CREATE INDEX IF NOT EXISTS idx_email_logs_ses_message_id ON email_logs(ses_message_id);
 CREATE INDEX IF NOT EXISTS idx_email_logs_created_at ON email_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_webhook_events_email_log_id ON webhook_events(email_log_id);
 CREATE INDEX IF NOT EXISTS idx_webhook_events_processed ON webhook_events(processed);

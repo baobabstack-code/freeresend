@@ -80,7 +80,7 @@ export const HOSTED_PRICING_TIERS: HostedPricingTier[] = [
     features: [
       "First 3,000 emails free",
       "$15/month flat fee after 3,000 emails",
-      "Use your own SES keys",
+      "Use your own Brevo or Amazon SES account",
       "Managed infrastructure",
       "Email analytics",
       "99.9% uptime SLA"

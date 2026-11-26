@@ -1,12 +1,13 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import "@testing-library/jest-dom";
+import { renderWithTheme, screen } from "@/test-utils/render";
 import SesProductionRequestHelper from "../SesProductionRequestHelper";
 
 describe("SesProductionRequestHelper", () => {
   it("generates a production request from buyer-safe public inputs", async () => {
-    render(<SesProductionRequestHelper />);
+    renderWithTheme(<SesProductionRequestHelper />);
+
+    expect(screen.getByRole("heading", { level: 1, name: /ses production request helper/i })).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText(/sending domain/i), "example.com");
     await userEvent.type(screen.getByLabelText(/website or app url/i), "https://example.com");
@@ -16,6 +17,8 @@ describe("SesProductionRequestHelper", () => {
     expect(screen.getByText(/request production access for amazon ses in us-east-1/i)).toBeInTheDocument();
     expect(screen.getByText(/sending domain: example.com/i)).toBeInTheDocument();
     expect(screen.getAllByText(/password resets and account notifications/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/through baobab mail, a resend-compatible/i)).toBeInTheDocument();
+    expect(screen.queryByText(/freeresend/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /book deployment review/i })).toHaveAttribute(
       "href",
       "https://buy.stripe.com/3cIcN49zBcRagx5dvXaMU01"

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/database";
+import { applyEmailEvent, type EmailEventStatus } from "@/lib/email-events";
 
 interface SESMessage {
   eventType: "send" | "delivery" | "bounce" | "complaint" | "reject";
@@ -67,87 +67,45 @@ async function handleSESWebhook(req: NextRequest) {
   }
 }
 
-async function processSESEvent(message: SESMessage) {
-  try {
-    // Find the email log by SES message ID
-    const emailResult = await query(
-      "SELECT * FROM email_logs WHERE ses_message_id = $1 LIMIT 1",
-      [message.mail.messageId]
-    );
-
-    if (emailResult.rows.length === 0) {
-      console.warn(
-        `Email log not found for message ID: ${message.mail.messageId}`
-      );
-      return;
-    }
-
-    const emailLog = {
-      ...emailResult.rows[0],
-      to_emails: JSON.parse(emailResult.rows[0].to_emails || "[]"),
-      cc_emails: JSON.parse(emailResult.rows[0].cc_emails || "[]"),
-      bcc_emails: JSON.parse(emailResult.rows[0].bcc_emails || "[]"),
-      attachments: JSON.parse(emailResult.rows[0].attachments || "[]"),
-    };
-
-    // Update email status based on event type
-    let newStatus = emailLog.status;
-    let errorMessage = null;
-
-    switch (message.eventType) {
-      case "delivery":
-        newStatus = "delivered";
-        break;
-      case "bounce":
-        newStatus = "bounced";
-        errorMessage = message.bounce?.bouncedRecipients
-          .map((r) => `${r.emailAddress}: ${r.diagnosticCode}`)
-          .join("; ");
-        break;
-      case "complaint":
-        newStatus = "complained";
-        errorMessage = `Complaint from: ${message.complaint?.complainedRecipients
+/** Map an SES event to an email status and hand it to the shared event recorder. */
+function mapSESEvent(message: SESMessage): {
+  status: EmailEventStatus | null;
+  errorMessage: string | null;
+} {
+  switch (message.eventType) {
+    case "delivery":
+      return { status: "delivered", errorMessage: null };
+    case "bounce":
+      return {
+        status: "bounced",
+        errorMessage:
+          message.bounce?.bouncedRecipients
+            .map((r) => `${r.emailAddress}: ${r.diagnosticCode}`)
+            .join("; ") ?? null,
+      };
+    case "complaint":
+      return {
+        status: "complained",
+        errorMessage: `Complaint from: ${message.complaint?.complainedRecipients
           .map((r) => r.emailAddress)
-          .join(", ")}`;
-        break;
-      case "reject":
-        newStatus = "failed";
-        errorMessage = "Email rejected by SES";
-        break;
-    }
-
-    // Update email log status
-    await query(
-      `UPDATE email_logs 
-       SET status = $1, error_message = $2, webhook_data = $3
-       WHERE id = $4`,
-      [newStatus, errorMessage, JSON.stringify(message), emailLog.id]
-    );
-
-    // Create webhook event record
-    await query(
-      `INSERT INTO webhook_events (email_log_id, event_type, event_data, processed)
-       VALUES ($1, $2, $3, $4)`,
-      [emailLog.id, message.eventType, JSON.stringify(message), true]
-    );
-
-    console.log(
-      `Processed ${message.eventType} event for email ${emailLog.id}`
-    );
-  } catch (error) {
-    console.error("Failed to process SES event:", error);
-
-    // Create unprocessed webhook event for manual review
-    try {
-      await query(
-        `INSERT INTO webhook_events (email_log_id, event_type, event_data, processed)
-         VALUES ($1, $2, $3, $4)`,
-        [null, message.eventType, JSON.stringify(message), false]
-      );
-    } catch (insertError) {
-      console.error("Failed to create webhook event record:", insertError);
-    }
+          .join(", ")}`,
+      };
+    case "reject":
+      return { status: "failed", errorMessage: "Email rejected by SES" };
+    default:
+      return { status: null, errorMessage: null };
   }
+}
+
+async function processSESEvent(message: SESMessage) {
+  const { status, errorMessage } = mapSESEvent(message);
+  await applyEmailEvent({
+    messageId: message.mail.messageId,
+    eventType: message.eventType,
+    status,
+    errorMessage,
+    raw: message,
+  });
 }
 
 function cors(response: NextResponse) {

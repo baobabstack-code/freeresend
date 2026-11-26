@@ -27,16 +27,18 @@ describe("SES production request helper", () => {
       useCase: "Password resets and account notifications",
       expectedVolume: "2,000 messages per month",
       optInSource: "Only registered users who request account email",
-      bounceHandling: "SNS webhook into FreeResend bounce handler",
+      bounceHandling: "SNS webhook into Baobab Mail bounce handler",
       complaintHandling: "SNS complaint webhook with suppression",
     });
 
     expect(request.subject).toBe("Request production access for Amazon SES in us-east-1");
     expect(request.body).toContain("Sending domain: example.com");
     expect(request.body).toContain("Use case: Password resets and account notifications");
-    expect(request.body).toContain("Bounce handling: SNS webhook into FreeResend bounce handler");
+    expect(request.body).toContain("Bounce handling: SNS webhook into Baobab Mail bounce handler");
     expect(request.body).toContain("Complaint handling: SNS complaint webhook with suppression");
     expect(request.body).toContain("I am not including AWS access keys, SMTP passwords, or customer data in this request.");
     expect(request.body).not.toContain("SECRET_ACCESS_KEY");
+    expect(request.body).toContain("through Baobab Mail");
+    expect(request.body).not.toContain("FreeResend");
   });
 });

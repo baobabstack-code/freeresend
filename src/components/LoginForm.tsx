@@ -1,93 +1,123 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
+import {
+  Body1,
+  Button,
+  Card,
+  Field,
+  Input,
+  makeStyles,
+  MessageBar,
+  MessageBarBody,
+  Spinner,
+  Title3,
+  tokens,
+} from "@fluentui/react-components";
+import { LockClosed20Regular, Mail20Regular } from "@fluentui/react-icons";
 import { useAuth } from "@/contexts/AuthContext";
+import { site } from "@/config/site";
+import BrandLogo from "./ui/BrandLogo";
+import { AppLink } from "./ui/links";
+
+const useStyles = makeStyles({
+  page: {
+    flex: 1,
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "32px 16px",
+    backgroundImage: `radial-gradient(circle at 20% 0%, rgba(245, 158, 11, 0.16), transparent 45%), radial-gradient(circle at 100% 100%, rgba(16, 185, 129, 0.10), transparent 40%)`,
+  },
+  card: {
+    width: "100%",
+    maxWidth: "420px",
+    padding: "32px 28px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "20px",
+  },
+  head: { display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", textAlign: "center" },
+  muted: { color: tokens.colorNeutralForeground3 },
+  form: { display: "flex", flexDirection: "column", gap: "16px" },
+  back: { textAlign: "center" },
+});
 
 export default function LoginForm() {
+  const s = useStyles();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const { login } = useAuth();
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     try {
       await login(email, password);
     } catch (err: unknown) {
-      const errorObj = err as { message?: string };
-      setError(errorObj.message || "Login failed");
+      setError((err as { message?: string })?.message || "Login failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to FreeResend
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Your self-hosted email service
-          </p>
+    <div className={s.page}>
+      <Card className={s.card}>
+        <div className={s.head}>
+          <BrandLogo size="large" href="/" />
+          <Title3 as="h1">Sign in to {site.name}</Title3>
+          <Body1 className={s.muted}>Manage your sending domains, API keys and email logs.</Body1>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                className="relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                className="relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-          </div>
 
-          {error && (
-            <div className="text-red-600 text-sm text-center">{error}</div>
-          )}
+        {error ? (
+          <MessageBar intent="error">
+            <MessageBarBody>{error}</MessageBarBody>
+          </MessageBar>
+        ) : null}
 
-          <div>
-            <button
-              type="submit"
+        <form className={s.form} onSubmit={handleSubmit}>
+          <Field label="Email address" required>
+            <Input
+              type="email"
+              name="email"
+              autoComplete="email"
+              value={email}
+              onChange={(_, d) => setEmail(d.value)}
+              contentBefore={<Mail20Regular />}
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Signing in..." : "Sign in"}
-            </button>
-          </div>
+            />
+          </Field>
+          <Field label="Password" required>
+            <Input
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(_, d) => setPassword(d.value)}
+              contentBefore={<LockClosed20Regular />}
+              disabled={loading}
+            />
+          </Field>
+          <Button
+            type="submit"
+            appearance="primary"
+            size="large"
+            disabled={loading || !email || !password}
+            icon={loading ? <Spinner size="tiny" /> : undefined}
+          >
+            {loading ? "Signing in…" : "Sign in"}
+          </Button>
         </form>
-      </div>
+
+        <Body1 className={s.back}>
+          <AppLink href="/">← Back to {site.name}</AppLink>
+        </Body1>
+      </Card>
     </div>
   );
 }
